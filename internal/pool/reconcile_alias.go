@@ -55,9 +55,9 @@ type AliasPreview struct {
 }
 
 type AliasResult struct {
-	Outcome     string `json:"outcome"`
-	Transaction string `json:"transaction,omitempty"`
-	StateHash   string `json:"state_sha256"`
+	Outcome           string `json:"outcome"`
+	Transaction       string `json:"transaction,omitempty"`
+	VerifiedStateHash string `json:"verified_state_sha256,omitempty"`
 }
 
 type aliasManifest struct {
@@ -518,7 +518,7 @@ func applyAlias(r AliasRequest, p AliasPreview, fault func(string) error, fence 
 	if e = os.Mkdir(dir, 0700); e != nil {
 		return AliasResult{}, fmt.Errorf("exclusive transaction backup unavailable")
 	}
-	result := AliasResult{Outcome: "not-applied", Transaction: dir, StateHash: p.Before}
+	result := AliasResult{Outcome: "not-applied", Transaction: dir}
 	if e = os.Chmod(dir, 0700); e != nil {
 		return result, e
 	}
@@ -575,10 +575,11 @@ func applyAlias(r AliasRequest, p AliasPreview, fault func(string) error, fence 
 			return result, fmt.Errorf("verification failed; guarded rollback refused: %w", re)
 		}
 		result.Outcome = "rolled-back"
+		result.VerifiedStateHash = p.Before
 		return result, fmt.Errorf("verification failed; original metadata restored")
 	}
 	result.Outcome = "confirmed"
-	result.StateHash = p.After
+	result.VerifiedStateHash = p.After
 	return result, nil
 }
 
@@ -680,13 +681,14 @@ func RecoverAlias(r AliasRequest, dir string, rollback bool, fence AliasWriterFe
 	}
 	// Match current key/lock/pool/target against the authenticated transaction.
 	s.preview = m.Preview
-	result := AliasResult{Transaction: dir, StateHash: aliasHash(s.before)}
+	result := AliasResult{Transaction: dir}
 	switch {
 	case bytes.Equal(s.before, before):
 		if e = s.fresh(before, false); e != nil {
 			return result, e
 		}
 		result.Outcome = "not-applied-or-rolled-back"
+		result.VerifiedStateHash = m.Preview.Before
 		return result, nil
 	case bytes.Equal(s.before, after):
 		if e = s.fresh(after, false); e != nil {
@@ -697,9 +699,10 @@ func RecoverAlias(r AliasRequest, dir string, rollback bool, fence AliasWriterFe
 				return result, e
 			}
 			result.Outcome = "rolled-back"
-			result.StateHash = m.Preview.Before
+			result.VerifiedStateHash = m.Preview.Before
 		} else {
 			result.Outcome = "applied-receipt-unconfirmed"
+			result.VerifiedStateHash = m.Preview.After
 		}
 		return result, nil
 	default:

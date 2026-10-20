@@ -302,6 +302,9 @@ func TestAliasTransactionRollbackAndLostReceipt(t *testing.T) {
 				t.Fatal("fault was not exercised")
 			}
 			expected := map[string]string{"before-write": "not-applied", "verify": "rolled-back", "lost-receipt": "accepted-but-unconfirmed"}[stage]
+			if stage == "lost-receipt" && result.VerifiedStateHash != "" {
+				t.Fatal("uncertain outcome claimed persisted state verification")
+			}
 			if result.Outcome != expected {
 				t.Fatalf("wrong outcome: %s", result.Outcome)
 			}
