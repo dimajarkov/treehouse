@@ -136,6 +136,13 @@ func ReadState(poolDir string) (State, error) {
 		return State{}, fmt.Errorf("unsupported treehouse state version %d", s.Version)
 	}
 	key, keyErr := readStateKey(poolDir)
+	s = validateStateInventories(s, key, keyErr)
+	return recoverMissingStateEntries(poolDir, s)
+}
+
+// Inventory validation is shared by recovering lifecycle reads and strict
+// read-only inspection. Only lifecycle reads may discover/recover entries.
+func validateStateInventories(s State, key []byte, keyErr error) State {
 	// Unversioned state was written by a pre-3.0 release, none of which seeded
 	// ignored files. That holds even beside a key: a 2.x binary still running
 	// across the upgrade rewrites 3.0 state unversioned and drops any seed
@@ -161,7 +168,7 @@ func ReadState(poolDir string) (State, error) {
 		}
 	}
 	s.Version = stateVersion
-	return recoverMissingStateEntries(poolDir, s)
+	return s
 }
 
 func hasSeedState(wt WorktreeEntry) bool {

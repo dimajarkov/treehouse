@@ -325,6 +325,23 @@ With `--no-fetch`, Treehouse resets or creates the worktree from existing local 
 
 `treehouse status --json` returns an array with `name`, `path`, `status`, `branch`, `detached`, `branch_error`, `recovery_reason`, `recovery_backup`, `flavor`, `lease_id`, `lease_holder`, `leased_at`, and `processes`. `recovery_reason` is set when an unsafe recovered lease remains quarantined. `recovery_backup` is the slot's recovery backup folder, set while that folder holds anything. `branch` names the checked-out branch of a git slot on a branch; it is empty for a detached HEAD, a jj slot, and a markerless (damaged) slot. `detached` is `true` only for a git slot on a detached HEAD (the state `treehouse get` leaves by default) and is omitted when false; `branch_error` is set when a slot's branch could not be read, so a read failure is never mistaken for a detached HEAD or an empty branch. `processes` is what `treehouse return` would terminate in that worktree, not every process whose working directory is inside it: the calling process and its ancestors are excluded, so running `status` from inside a pooled worktree reports what is resident in the slot instead of the shell you typed the command into. When the process table itself cannot be read, `status` is `unverified` and `processes` is empty: whether anything is running there is unknown, so the slot is not reported `available`, `dirty`, or `in-use`, and the error is printed as a warning on stderr. A lease, an owner reservation, or the slot you are standing in is still reported as such, because those facts do not depend on the scan. `flavor` is the backend the worktree's own marker identifies (`"git"` or `"jj"`) and is omitted when no marker is found. Non-leased entries use empty lease strings and a `null` timestamp. State files written before lease identities remain readable; their existing leases have an empty `lease_id` until released and acquired again.
 
+### Read-only lease inspection
+
+For a fresh lease identity without pool-wide process scans or lifecycle recovery, run:
+
+```sh
+treehouse status --lease-path /absolute/path/to/worktree --json
+```
+
+This explicit mode returns one array entry with `schema_version: "treehouse.lease-inspection.v1"`, the canonical `pool` and `path`, `name`, `status: "leased"`, `lease_id`, `lease_holder`, and `leased_at`.
+It requires current, validated persisted state and an existing available pool lock.
+It refuses contention immediately and denies missing, corrupt, legacy, quarantined, damaged or ambiguous state without creating files, repairing the pool, or starting the update checker.
+It accepts an absolute symlink alias only when it resolves to exactly one registered canonical worktree.
+Unlike ordinary `status`, it does not heal state, enumerate processes, check sibling branches or imply that the worktree is idle; the result omits `processes`.
+Automation must invoke it afresh around each protected operation and retain its independent process, source and runtime checks.
+A nonzero exit or unsupported mode is a denial, never permission to reuse a previous successful result.
+
+
 Release a lease with `treehouse return <path>`, which terminates lingering processes and verifies that no foreign process remains before it resets the worktree, clears the lease, and returns the worktree to the pool.
 If process termination or that verification fails, the command exits nonzero and leaves the worktree and lease in place instead of recycling a slot that may still be in use.
 A non-interactive dirty return aborts without cleaning: prune will not reclaim that slot. Retry by pasting the printed `treehouse return --force <quoted-path>` hint (shell-quoted so copy-paste does not expand metacharacters). `--force` with no path only works from inside a repository.

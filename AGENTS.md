@@ -23,7 +23,7 @@ User-facing behavior: [README.md](README.md). Settings and precedence: [treehous
 - All VCS operations go through `internal/vcs`; per-slot operations dispatch on the slot's own marker, never the configured backend. Git is the default; jj is strict opt-in.
 - One base branch per slot is shared by acquire, parking, prune, and destroy; `WorktreeEntry.BaseBranch` records only an explicitly requested base.
 - Prune and destroy are dry-run unless `--yes`; each risk class needs its own opt-in flag, and there is no cross-pool destroy.
-- A command that leaves the world unchanged must not exit 0 (see `cmd/exit.go` and docs/design.md for the two exceptions).
+- A command that leaves the world unchanged must not exit 0 (see `cmd/exit.go` and docs/design.md for the two lifecycle exceptions and the explicit read-only `status --lease-path` query).
 - `WriteState` stays atomic; a corrupt state file recovers every entry as leased and quarantined.
 - Lifecycle hooks are read from user-level config only; repo-level hooks are ignored for safety.
 
