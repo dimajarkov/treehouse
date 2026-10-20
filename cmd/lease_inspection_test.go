@@ -99,7 +99,13 @@ func TestLeaseInspectionSkipsUpdaterEvenWithInvalidPath(t *testing.T) {
 	defer func() { spawnBackgroundCheck = previous }()
 	for _, value := range []string{"", filepath.Join(t.TempDir(), "synthetic")} {
 		statusCmd.Flags().Set("lease-path", value)
-		output := captureStderr(t, func() { rootCmd.PersistentPreRun(statusCmd, nil) })
+		output := captureStderr(t, func() {
+			func() {
+				if e := rootCmd.PersistentPreRunE(statusCmd, nil); e != nil {
+					t.Fatal(e)
+				}
+			}()
+		})
 		if spawned != 0 || output != "" {
 			t.Fatal("read-only lease mode invoked updater")
 		}

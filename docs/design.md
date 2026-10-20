@@ -38,7 +38,7 @@ Each entry records why the code is shaped the way it is, so read the relevant on
   Canonicalizing the keeper alone is insufficient: the old lexical algorithm invoked through the logical pool root rediscovers an alias in the opposite direction.
   Apply and explicit rollback therefore require a lifecycle-owner writer fence that first establishes prevention at every owned launch route, excludes existing/waiting legacy writers, and prevents new legacy launches through completion.
   The pool lock, a momentary process inventory, a user-supplied boolean or a cached receipt cannot establish that lifetime; no foreign process may be killed to manufacture it.
-  There is deliberately no production fence adapter or CLI bypass yet, so mutation stops with an explicit exclusion blocker while preview/inspection remain read-only.
+  Direct repair CLI has no fence; the guarded wrapper bridge supplies a checked cooperative owner/admission fence only from existing private policy and kernel locks.
   Windows refuses this mutation until equivalent ACL/owner and directory durability semantics have runtime proof.
   README's alias reconciliation section owns the operator procedure and separate live-apply approval boundary.
 
@@ -89,7 +89,12 @@ Release ordering is pool transaction first, exclusive gate second, launch-owner 
 A repair path must not acquire a shared outer gate and then recursively seek its exclusive counterpart.
 The existing external-volume/configuration guard remains before admission and unchanged; do not derive pool names by copying the VCS origin-hash algorithm into a shell wrapper.
 
-This prototype is not wired to Cobra or the installed wrapper and has no production launch-owner quiescence implementation.
-CLI mutation still passes a nil fence and remains disabled.
+The source bridge is wired to Cobra through `launch-admitted` and the copied guarded wrapper in `owner-wrapper/treehouse.sh`; the installed wrapper remains untouched.
+Every admitted normal command holds the cooperative owner lock shared and passes actual shared gate/owner file descriptions to its child.
+The child verifies those handles against named private gates and approved backing policy before lifecycle I/O, and keeps them alive independently of its supervisor.
+SIGKILL of the supervisor cannot reopen maintenance while the child lives; normal signals are forwarded only to that exact child and its terminal status/signal is preserved.
+Repair obtains exclusive cooperative owner and admission holds, then enters the state transaction in-process without a recursive shared hold.
+Neither missing policy nor empty newly provisioned locks proves initial owner coverage: rollout still requires held control over the named launchers and voluntary drain of all pre-gate actors, including pool-lock waiters.
+Actual live launch-owner coverage has not been established, so no policy provisioning, activation or live repair is authorized by source proof.
 The current user-local installation owner only permits backing replacement while preserving the wrapper, so activating an admission wrapper requires separately reviewed exact owner-maintenance authority and an explicit extension to that owner procedure.
 Do not activate this source by running Home Manager, a global installer, self-update or a profile migration.

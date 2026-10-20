@@ -9,7 +9,12 @@ import (
 // AdmissionRoute is owned installation policy, not a caller's claim that old
 // writers are gone. Hashes must name the independently reviewed wrapper and
 // prevention-capable backing artifact at the installed owned route.
-type AdmissionRoute struct{ Wrapper, Backing, WrapperSHA256, BackingSHA256 string }
+type AdmissionRoute struct {
+	Wrapper       string `json:"wrapper"`
+	Backing       string `json:"backing"`
+	WrapperSHA256 string `json:"wrapper_sha256"`
+	BackingSHA256 string `json:"backing_sha256"`
+}
 
 func admissionGatePath(pool string) string {
 	return filepath.Join(pool, "treehouse-launch-admission.lock")

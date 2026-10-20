@@ -451,7 +451,8 @@ Canonicalizing the keeper does not prevent an old binary invoked through a logic
 Before apply, the lifecycle owner must activate reviewed prevention on every owned launch route and hold a writer fence that excludes already-running or waiting legacy writers and prevents new legacy launches until verification or rollback finishes.
 The pool lock and a process snapshot cannot provide that exclusion.
 Do not kill foreign processes to obtain it.
-This source candidate supplies the guarded transaction API and synthetic fence tests; no production writer-fence adapter is available, so the CLI refuses apply and explicit rollback even with a valid preview and approval hash.
+The guarded wrapper bridge supplies shared command admission, inherited child locks, and exclusive cooperative launch-owner maintenance for apply/rollback.
+Direct repair invocation still refuses mutation; the admitted path requires existing private owner policy and locks provisioned only after separately proven owner coverage and voluntary legacy drain.
 Read-only preview and inspection remain available.
 Stop live mutation if the launch-route inventory, installed prevention, legacy-writer exclusion, or held fence lifetime cannot be independently proven.
 

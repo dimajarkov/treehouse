@@ -34,20 +34,29 @@ so that multiple AI coding agents can work on the same repo in parallel.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return getRunE(cmd, args)
 	},
-	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+	PersistentPostRunE: func(*cobra.Command, []string) error {
+		if admissionChildCheck != nil {
+			return admissionChildCheck()
+		}
+		return nil
+	},
+	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		if err := verifyAdmissionChild(); err != nil {
+			return err
+		}
 		// This explicit observation must not spawn a cache-writing updater.
 		// Changed also covers an invalid empty path: refusals stay read-only.
-		if cmd.Parent() == reconcileAliasCmd || cmd == reconcileAliasCmd || (cmd == statusCmd && cmd.Flags().Changed("lease-path")) {
-			return
+		if cmd == launchAdmittedCmd || cmd.Parent() == reconcileAliasCmd || cmd == reconcileAliasCmd || (cmd == statusCmd && cmd.Flags().Changed("lease-path")) {
+			return nil
 		}
 		// Skip update check for dev builds, Nix store installs (upgraded
 		// through Nix, not `treehouse update`), the update command itself,
 		// or when explicitly suppressed via env var.
 		if version == "dev" || os.Getenv("TREEHOUSE_NO_UPDATE_CHECK") == "1" || runningFromNixStore() {
-			return
+			return nil
 		}
 		if cmd.Name() == "update" {
-			return
+			return nil
 		}
 
 		// Show cached update notice from a previous check
@@ -62,6 +71,8 @@ so that multiple AI coding agents can work on the same repo in parallel.`,
 		if updater.IsCacheStale(version) {
 			_ = spawnBackgroundCheck(version)
 		}
+
+		return nil
 	},
 }
 

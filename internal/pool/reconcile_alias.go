@@ -480,7 +480,8 @@ func writeAliasExclusive(path string, b []byte) error {
 // AliasWriterFence must establish prevention on every owned launch route and
 // exclude existing/waiting legacy writers and new legacy launches until release.
 // A process snapshot, user-supplied boolean, or the pool lock alone cannot do
-// this. No production adapter is available yet: CLI mutations fail closed.
+// this. Direct repair CLI fails closed; the guarded owner bridge supplies
+// held cooperative owner/admission locks only under reviewed installed policy.
 // The lifecycle owner must supply an independently reviewed adapter; fixture
 // fences live only in test files and cannot be selected by a flag or env var.
 type AliasWriterFence func(AliasRequest) (check func() error, release func(), err error)

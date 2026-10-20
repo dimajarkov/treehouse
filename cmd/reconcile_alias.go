@@ -37,10 +37,12 @@ func readAliasInput(path string, out any) (string, error) {
 	return fmt.Sprintf("%x", sha256.Sum256(data)), nil
 }
 
-var reconcileAliasCmd = &cobra.Command{Use: "reconcile-alias", Short: "Preview or explicitly reconcile one authenticated alias duplicate", Args: cobra.NoArgs, RunE: func(*cobra.Command, []string) error { return fmt.Errorf("select preview, apply, inspect or rollback") }}
+var reconcileAliasCmd = newReconcileAliasCommand(nil, "")
 
-func init() {
-	rootCmd.AddCommand(reconcileAliasCmd)
+func init() { rootCmd.AddCommand(reconcileAliasCmd) }
+func newReconcileAliasCommand(fence pool.AliasWriterFence, scope string) *cobra.Command {
+	parent := &cobra.Command{SilenceUsage: true, SilenceErrors: true, Use: "reconcile-alias", Short: "Preview or explicitly reconcile one authenticated alias duplicate", Args: cobra.NoArgs, RunE: func(*cobra.Command, []string) error { return fmt.Errorf("select preview, apply, inspect or rollback") }}
+
 	for _, mode := range []string{"preview", "apply", "inspect", "rollback"} {
 		mode := mode
 		var requestPath, previewPath, transaction, approval string
@@ -51,6 +53,9 @@ func init() {
 			var r pool.AliasRequest
 			if _, e := readAliasInput(requestPath, &r); e != nil {
 				return e
+			}
+			if scope != "" && r.Pool != scope {
+				return fmt.Errorf("request differs from admitted pool")
 			}
 			var output any
 			var e error
@@ -72,12 +77,12 @@ func init() {
 				if approval == "" || approval != digest {
 					return fmt.Errorf("--approve-preview-sha256 must match the exact reviewed preview file")
 				}
-				output, e = pool.ApplyAlias(r, p, nil)
+				output, e = pool.ApplyAlias(r, p, fence)
 			default:
 				if previewPath != "" || transaction == "" || approval != "" {
 					return fmt.Errorf("inspect/rollback require --request and --transaction only")
 				}
-				output, e = pool.RecoverAlias(r, transaction, mode == "rollback", nil)
+				output, e = pool.RecoverAlias(r, transaction, mode == "rollback", fence)
 			}
 			// An uncertain mutation needs a receipt even when the command fails.
 			// Errors and receipts contain no raw state, keys or lease field dump.
@@ -96,6 +101,7 @@ func init() {
 		c.Flags().StringVar(&previewPath, "preview", "", "Fresh authenticated preview JSON file (apply only)")
 		c.Flags().StringVar(&transaction, "transaction", "", "Exact transaction backup directory (inspect/rollback only)")
 		c.Flags().StringVar(&approval, "approve-preview-sha256", "", "SHA256 of reviewed preview file (apply only)")
-		reconcileAliasCmd.AddCommand(c)
+		parent.AddCommand(c)
 	}
+	return parent
 }
