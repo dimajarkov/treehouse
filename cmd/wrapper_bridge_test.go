@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"syscall"
 	"testing"
@@ -306,9 +307,11 @@ func TestCopiedWrapperBridgePreviewApplyAndCooperativeDrain(t *testing.T) {
 	// the supervisor mirrors the child's terminal signal after it exits.
 	ready2 := filepath.Join(t.TempDir(), "ready")
 	release2 := filepath.Join(t.TempDir(), "release")
+	signalShell := filepath.Join(t.TempDir(), "owned-signal-shell")
+	os.WriteFile(signalShell, []byte("#!/bin/sh\necho $$ > \"$TREEHOUSE_TEST_READY\"\nwhile [ ! -e \"$TREEHOUSE_TEST_RELEASE\" ]; do /bin/sleep 0.02; done\n"), 0700)
 	c2 := exec.Command(wrapper, "get")
 	c2.Dir = repo
-	c2.Env = buildEnv(home, "SHELL="+waitShellBin, "TREEHOUSE_TEST_READY="+ready2, "TREEHOUSE_TEST_RELEASE="+release2)
+	c2.Env = buildEnv(home, "SHELL="+signalShell, "TREEHOUSE_TEST_READY="+ready2, "TREEHOUSE_TEST_RELEASE="+release2)
 	c2.Stdout = output
 	c2.Stderr = output
 	if e = c2.Start(); e != nil {
@@ -337,7 +340,22 @@ func TestCopiedWrapperBridgePreviewApplyAndCooperativeDrain(t *testing.T) {
 	if !status2.Signaled() || status2.Signal() != syscall.SIGTERM {
 		t.Fatalf("terminal signal not preserved: %v", status2)
 	}
+
+	shellPIDBytes, _ := os.ReadFile(ready2)
+	shellPID, e := strconv.Atoi(strings.TrimSpace(string(shellPIDBytes)))
+	if e != nil {
+		t.Fatal(e)
+	}
 	os.WriteFile(release2, nil, 0600)
+	// The shell is an owned grandchild after backing SIGTERM. Wait for its
+	// voluntary exit before TempDir cleanup can remove the release predicate.
+	deadline = time.Now().Add(10 * time.Second)
+	for syscall.Kill(shellPID, 0) == nil {
+		if time.Now().After(deadline) {
+			t.Fatal("owned signal fixture did not voluntarily exit")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
 	t.Log("copied-wrapper preview/apply/rollback passed; cooperative pre-gate waiter blocked apply; external guards preserved with synthetic device seam")
 }
 
