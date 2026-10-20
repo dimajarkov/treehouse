@@ -20,14 +20,18 @@ var launchAdmittedCmd = &cobra.Command{Use: "launch-admitted --guarded-root ROOT
 
 func init() { rootCmd.AddCommand(launchAdmittedCmd) }
 func runLaunchAdmitted(cmd *cobra.Command, args []string) error {
-	if len(args) < 4 || args[0] != "--guarded-root" || args[2] != "--" {
+	if len(args) < 6 || args[0] != "--guarded-root" || args[2] != "--selected-pool" || args[4] != "--" {
 		return fmt.Errorf("guarded wrapper root and original command required")
 	}
 	guarded, e := filepath.EvalSymlinks(args[1])
 	if e != nil || guarded != filepath.Clean(args[1]) {
 		return fmt.Errorf("canonical guarded root required")
 	}
-	raw := args[3:]
+	selected := args[3]
+	if selected == "" || filepath.Base(selected) != selected || selected == "." {
+		return fmt.Errorf("exact selected pool name required")
+	}
+	raw := args[5:]
 	if len(raw) == 0 {
 		return fmt.Errorf("explicit admitted command required")
 	}
@@ -68,6 +72,29 @@ func runLaunchAdmitted(cmd *cobra.Command, args []string) error {
 	if filepath.Dir(dir) != guarded {
 		return fmt.Errorf("effective pool escaped external-storage guard")
 	}
+	targetCommand, _, findErr := cmd.Root().Find(raw)
+	if findErr != nil {
+		return findErr
+	}
+	if targetCommand.Name() == "launch-admitted" || targetCommand.Name() == "update" {
+		return fmt.Errorf("recursive admission and general self-update are forbidden")
+	}
+
+	if filepath.Base(dir) != selected {
+		if raw[0] == "reconcile-alias" {
+			return fmt.Errorf("repair request outside selected admission pool")
+		}
+		// No other pool gains a new policy or gate requirement. This is the same
+		// guarded backing dispatch, with exact child status/signal preservation.
+		child := exec.Command(os.Args[0], raw...)
+		child.Stdin = cmd.InOrStdin()
+		child.Stdout = cmd.OutOrStdout()
+		child.Stderr = cmd.ErrOrStderr()
+		if e := child.Run(); e != nil {
+			return admittedChildExit(e)
+		}
+		return nil
+	}
 	policy, policyCheck, e := pool.ReadBridgePolicy(dir)
 	if e != nil {
 		return e
@@ -79,13 +106,6 @@ func runLaunchAdmitted(cmd *cobra.Command, args []string) error {
 	executable, e = filepath.EvalSymlinks(executable)
 	if e != nil || executable != policy.Route.Backing {
 		return fmt.Errorf("bridge is not installed owned backing")
-	}
-	targetCommand, _, findErr := cmd.Root().Find(raw)
-	if findErr != nil {
-		return findErr
-	}
-	if targetCommand.Name() == "launch-admitted" || targetCommand.Name() == "update" {
-		return fmt.Errorf("recursive admission and general self-update are forbidden")
 	}
 	repair := len(raw) > 1 && raw[0] == "reconcile-alias" && (raw[1] == "apply" || raw[1] == "rollback")
 	if repair {

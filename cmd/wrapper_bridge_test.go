@@ -70,6 +70,7 @@ func TestCopiedWrapperBridgePreviewApplyAndCooperativeDrain(t *testing.T) {
 	statStub := filepath.Join(t.TempDir(), "synthetic-stat")
 	os.WriteFile(statStub, []byte("#!/bin/sh\nif [ -n \"${SYNTHETIC_SAME_DEVICE:-}\" ]; then echo 1; elif [ \"$1\" = -L ]; then echo 2; else echo 1; fi\n"), 0700)
 	draft := strings.Replace(string(source), "EXPECTED=\"/Volumes/OWC Envoy Ultra/20_PROJECTS/Development/Treehouse\"", "EXPECTED=\""+parent+"\"", 1)
+	draft = strings.ReplaceAll(draft, "--selected-pool arena-crm-1adf4e", "--selected-pool "+filepath.Base(dir))
 	draft = strings.ReplaceAll(draft, "/usr/bin/stat", statStub)
 	os.WriteFile(wrapper, []byte(draft), 0700)
 	route := pool.AdmissionRoute{Wrapper: wrapper, Backing: backing, WrapperSHA256: cmdAliasHash([]byte(draft)), BackingSHA256: cmdAliasHash(bin)}
@@ -175,6 +176,24 @@ func TestCopiedWrapperBridgePreviewApplyAndCooperativeDrain(t *testing.T) {
 		})
 	}
 
+	// A sibling pool keeps its original guarded dispatch without provisioning
+	// admission policy, touching selected metadata or taking selected-pool locks.
+	otherRepo, _ := setupTestRepo(t)
+	_, otherErr, otherCode := runTreehouse(t, otherRepo, home, nil, "get", "--lease", "--lease-holder", "synthetic-sibling", "--json")
+	if otherCode != 0 {
+		t.Fatal(otherErr)
+	}
+	selectedBefore, _ := os.ReadFile(filepath.Join(dir, "treehouse-state.json"))
+	sibling := exec.Command(wrapper, "status", "--json")
+	sibling.Dir = otherRepo
+	sibling.Env = buildEnv(home)
+	if b, e := sibling.CombinedOutput(); e != nil {
+		t.Fatalf("sibling pool dispatch changed: %s", b)
+	}
+	selectedAfter, _ := os.ReadFile(filepath.Join(dir, "treehouse-state.json"))
+	if !bytes.Equal(selectedBefore, selectedAfter) {
+		t.Fatal("sibling command changed selected pool")
+	}
 	// Owned abrupt-supervisor-loss proof. The actual backing child must keep
 	// both kernel locks after its supervising wrapper is killed.
 	ready := filepath.Join(t.TempDir(), "child-pid")

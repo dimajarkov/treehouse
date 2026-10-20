@@ -84,4 +84,4 @@ POOL_RESOLVED=$(/bin/realpath "$POOL_ROOT" 2>/dev/null) || fail "configured pool
 [ "$POOL_RESOLVED" = "$EXPECTED" ] || fail "configured pool root resolves to $POOL_RESOLVED instead of $EXPECTED"
 
 unset TREEHOUSE_INHERITED_ADMISSION
-exec "$REAL" launch-admitted --guarded-root "$POOL_RESOLVED" -- "$@"
+exec "$REAL" launch-admitted --guarded-root "$POOL_RESOLVED" --selected-pool arena-crm-1adf4e -- "$@"

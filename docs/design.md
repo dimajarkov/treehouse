@@ -98,3 +98,20 @@ Neither missing policy nor empty newly provisioned locks proves initial owner co
 Actual live launch-owner coverage has not been established, so no policy provisioning, activation or live repair is authorized by source proof.
 The current user-local installation owner only permits backing replacement while preserving the wrapper, so activating an admission wrapper requires separately reviewed exact owner-maintenance authority and an explicit extension to that owner procedure.
 Do not activate this source by running Home Manager, a global installer, self-update or a profile migration.
+
+## Scoped guarded wrapper bridge
+
+The source wrapper admits only `arena-crm-1adf4e`; other pools retain their previous guarded backing dispatch without needing policy or new locks.
+The brief global wrapper/backing activation hold must cover launchers using those shared files; ongoing owner/admission exclusion for repair is selected-pool-only.
+The bridge resolves effective root through the existing config/VCS resolver and refuses any selected pool outside the wrapper's already-validated external root.
+Default `get` now enters the guarded route, and general self-update is refused in accordance with the existing installation owner.
+Every original external-volume, logical symlink, different-device and configured-root refusal remains in the source wrapper.
+The device condition is mocked only in temporary integration tests so source proof never claims a real external mount acceptance.
+
+Private owner policy is an installation record under the selected pool, not a runtime boolean proving legacy drain.
+No command provisions it or its two locks.
+Before approved provisioning, the actual launch owners must pause all pre-gate paths and account for their existing and queued actors, then wait for voluntary completion.
+If that complete owner scope is unknown, stop without activating or touching pool metadata.
+Post-bootstrap, every controlled launcher holds the cooperative owner boundary shared for its full command lifetime; exclusive maintenance cannot proceed until those actors finish.
+The backing child's independently inherited kernel descriptions preserve exclusion if its supervisor is killed.
+Policy/gate/backing identities are checked before lifecycle I/O; no environment marker without matching live handles can establish admission.
