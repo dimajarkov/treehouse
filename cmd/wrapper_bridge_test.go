@@ -194,6 +194,48 @@ func TestCopiedWrapperBridgePreviewApplyAndCooperativeDrain(t *testing.T) {
 	if !bytes.Equal(selectedBefore, selectedAfter) {
 		t.Fatal("sibling command changed selected pool")
 	}
+
+	// Sibling-pool dispatch must remain exec, not a supervisor that can orphan
+	// the backing command when only the wrapper PID receives termination.
+	siblingReady := filepath.Join(t.TempDir(), "ready")
+	siblingRelease := filepath.Join(t.TempDir(), "release")
+	siblingLong := exec.Command(wrapper, "get")
+	siblingLong.Dir = otherRepo
+	siblingLong.Env = buildEnv(home, "SHELL="+waitShellBin, "TREEHOUSE_TEST_READY="+siblingReady, "TREEHOUSE_TEST_RELEASE="+siblingRelease)
+	siblingLog, e := os.CreateTemp(t.TempDir(), "sibling-log")
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer siblingLog.Close()
+	siblingLong.Stdout = siblingLog
+	siblingLong.Stderr = siblingLog
+	if e = siblingLong.Start(); e != nil {
+		t.Fatal(e)
+	}
+	defer os.WriteFile(siblingRelease, nil, 0600)
+	siblingDeadline := time.Now().Add(15 * time.Second)
+	for {
+		if b, _ := os.ReadFile(siblingReady); len(b) > 0 {
+			break
+		}
+		if time.Now().After(siblingDeadline) {
+			siblingLong.Process.Kill()
+			siblingLong.Wait()
+			t.Fatal("owned sibling not ready")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	siblingLong.Process.Signal(syscall.SIGTERM)
+	siblingErr := siblingLong.Wait()
+	siblingExit, ok := siblingErr.(*exec.ExitError)
+	if !ok {
+		t.Fatal("sibling termination not preserved")
+	}
+	siblingStatus := siblingExit.Sys().(syscall.WaitStatus)
+	if !siblingStatus.Signaled() || siblingStatus.Signal() != syscall.SIGTERM {
+		t.Fatal("sibling SIGTERM did not terminate backing PID")
+	}
+	os.WriteFile(siblingRelease, nil, 0600)
 	// Owned abrupt-supervisor-loss proof. The actual backing child must keep
 	// both kernel locks after its supervising wrapper is killed.
 	ready := filepath.Join(t.TempDir(), "child-pid")

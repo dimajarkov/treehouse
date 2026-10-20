@@ -27,3 +27,13 @@ func admittedChildExit(e error) error {
 	}
 	return e
 }
+
+// Unselected pools retain the owner's original exec dispatch: no new parent
+// can die while leaving the backing process running under a different PID.
+func execUnselectedAdmission(args []string) error {
+	executable, e := os.Executable()
+	if e != nil {
+		return e
+	}
+	return syscall.Exec(executable, append([]string{executable}, args...), os.Environ())
+}

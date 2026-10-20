@@ -86,14 +86,7 @@ func runLaunchAdmitted(cmd *cobra.Command, args []string) error {
 		}
 		// No other pool gains a new policy or gate requirement. This is the same
 		// guarded backing dispatch, with exact child status/signal preservation.
-		child := exec.Command(os.Args[0], raw...)
-		child.Stdin = cmd.InOrStdin()
-		child.Stdout = cmd.OutOrStdout()
-		child.Stderr = cmd.ErrOrStderr()
-		if e := child.Run(); e != nil {
-			return admittedChildExit(e)
-		}
-		return nil
+		return execUnselectedAdmission(raw)
 	}
 	policy, policyCheck, e := pool.ReadBridgePolicy(dir)
 	if e != nil {
