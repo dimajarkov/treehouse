@@ -112,31 +112,14 @@ func TestReconcileAliasCLIRequiresExplicitPreviewAndModes(t *testing.T) {
 		}
 	}
 	out, errout, status = runTreehouse(t, repo, home, nil, "reconcile-alias", "apply", "--request", request, "--preview", preview, "--approve-preview-sha256", cmdAliasHash([]byte(out)))
-	if status != 0 {
-		t.Fatalf("apply: %s", errout)
+
+	if status == 0 || strings.TrimSpace(out) != "" || !strings.Contains(errout, "legacy writer exclusion unproven") {
+		t.Fatal("CLI did not fail closed without a lifecycle-owner fence")
 	}
-	var result pool.AliasResult
-	if e = json.Unmarshal([]byte(out), &result); e != nil || result.Outcome != "confirmed" {
-		t.Fatal("apply receipt incorrect")
+	after, _ = json.Marshal(poolFileSnapshot(t, dir))
+	if string(before) != string(after) {
+		t.Fatal("unfenced CLI apply changed metadata")
 	}
-	for _, mode := range []string{"inspect", "rollback"} {
-		out, errout, status = runTreehouse(t, repo, home, nil, "reconcile-alias", mode, "--request", request, "--transaction", result.Transaction)
-		if status != 0 {
-			t.Fatalf("%s: %s", mode, errout)
-		}
-		var receipt pool.AliasResult
-		if e = json.Unmarshal([]byte(out), &receipt); e != nil {
-			t.Fatal(e)
-		}
-		if mode == "inspect" && receipt.Outcome != "applied-receipt-unconfirmed" {
-			t.Fatal("inspect misclassified")
-		}
-		if mode == "rollback" && receipt.Outcome != "rolled-back" {
-			t.Fatal("rollback receipt incorrect")
-		}
-	}
-	restored, e := os.ReadFile(filepath.Join(dir, "treehouse-state.json"))
-	if e != nil || string(restored) != string(data) {
-		t.Fatal("CLI rollback did not restore exact bytes")
-	}
+	// Successful mutation/recovery is exercised by the pool tests with their
+	// fixture fence; the production command deliberately has no such adapter.
 }

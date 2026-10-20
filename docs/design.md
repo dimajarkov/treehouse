@@ -34,6 +34,11 @@ Each entry records why the code is shaped the way it is, so read the relevant on
   Recovery compares authenticated original/candidate byte hashes; it never replays an apply, and rollback refuses changed state, key, lock, target, Git marker, repository or ownership.
   An atomic-write or lost-receipt error is accepted-but-unconfirmed until that classification, never assumed to be rejection.
   The exclusive nonce directory prevents token replay even after rollback; backups are retained without automatic cleanup.
+  Candidate verification reuses `inspectLeaseObservation` under the existing continuously held transaction lock; calling public `InspectLease` here would recursively contend for that same lock.
+  Canonicalizing the keeper alone is insufficient: the old lexical algorithm invoked through the logical pool root rediscovers an alias in the opposite direction.
+  Apply and explicit rollback therefore require a lifecycle-owner writer fence that first establishes prevention at every owned launch route, excludes existing/waiting legacy writers, and prevents new legacy launches through completion.
+  The pool lock, a momentary process inventory, a user-supplied boolean or a cached receipt cannot establish that lifetime; no foreign process may be killed to manufacture it.
+  There is deliberately no production fence adapter or CLI bypass yet, so mutation stops with an explicit exclusion blocker while preview/inspection remain read-only.
   Windows refuses this mutation until equivalent ACL/owner and directory durability semantics have runtime proof.
   README's alias reconciliation section owns the operator procedure and separate live-apply approval boundary.
 

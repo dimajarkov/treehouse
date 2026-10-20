@@ -91,7 +91,7 @@ func TestAliasPreviewApplyPreservesOwnerAndSiblings(t *testing.T) {
 	if _, e = InspectLease(r.Pool, r.Target); e == nil {
 		t.Fatal("ambiguous original unexpectedly admitted")
 	}
-	result, e := ApplyAlias(r, p)
+	result, e := ApplyAlias(r, p, syntheticAliasFence)
 	if e != nil || result.Outcome != "confirmed" {
 		t.Fatalf("apply: %s %v", result.Outcome, e)
 	}
@@ -124,18 +124,18 @@ func TestAliasPreviewApplyPreservesOwnerAndSiblings(t *testing.T) {
 			t.Fatal("backup permissions")
 		}
 	}
-	recovered, e := RecoverAlias(r, result.Transaction, false)
+	recovered, e := RecoverAlias(r, result.Transaction, false, nil)
 	if e != nil || recovered.Outcome != "applied-receipt-unconfirmed" {
 		t.Fatalf("read-only receipt recovery: %v", e)
 	}
-	rolled, e := RecoverAlias(r, result.Transaction, true)
+	rolled, e := RecoverAlias(r, result.Transaction, true, syntheticAliasFence)
 	if e != nil || rolled.Outcome != "rolled-back" || !bytes.Equal(before, aliasRead(t, stateFilePath(r.Pool))) {
 		t.Fatalf("rollback: %v", e)
 	}
 	if _, e = InspectLease(r.Pool, r.Target); e == nil {
 		t.Fatal("rollback relaxed inspector")
 	}
-	if _, e = ApplyAlias(r, p); e == nil {
+	if _, e = ApplyAlias(r, p, syntheticAliasFence); e == nil {
 		t.Fatal("consumed preview replay after rollback admitted")
 	}
 	t.Log("confirmed: fresh preview read-only; exact keeper/siblings preserved; strict lease passes only candidate; exact rollback and consumed-token denial")
@@ -200,7 +200,7 @@ func TestAliasApplyRejectsChangedPreviewOrAuthority(t *testing.T) {
 				os.Mkdir(aliasTransactionPath(r, p), 0700)
 			}
 			stateBefore := aliasRead(t, stateFilePath(r.Pool))
-			_, e := ApplyAlias(r, p)
+			_, e := ApplyAlias(r, p, syntheticAliasFence)
 			if e == nil {
 				t.Fatal("changed preview/authority admitted")
 			}
@@ -297,7 +297,7 @@ func TestAliasTransactionRollbackAndLostReceipt(t *testing.T) {
 					return fmt.Errorf("synthetic interruption")
 				}
 				return nil
-			})
+			}, syntheticAliasFence)
 			if e == nil {
 				t.Fatal("fault was not exercised")
 			}
@@ -305,7 +305,7 @@ func TestAliasTransactionRollbackAndLostReceipt(t *testing.T) {
 			if result.Outcome != expected {
 				t.Fatalf("wrong outcome: %s", result.Outcome)
 			}
-			observed, e := RecoverAlias(r, result.Transaction, false)
+			observed, e := RecoverAlias(r, result.Transaction, false, nil)
 			if e != nil {
 				t.Fatal(e)
 			}
@@ -313,7 +313,7 @@ func TestAliasTransactionRollbackAndLostReceipt(t *testing.T) {
 				if observed.Outcome != "applied-receipt-unconfirmed" {
 					t.Fatal("lost receipt blindly treated as rejection")
 				}
-				if _, e = RecoverAlias(r, result.Transaction, true); e != nil {
+				if _, e = RecoverAlias(r, result.Transaction, true, syntheticAliasFence); e != nil {
 					t.Fatal(e)
 				}
 			} else if observed.Outcome != "not-applied-or-rolled-back" {
@@ -331,7 +331,7 @@ func TestAliasRollbackRejectsStaleOrTamperedBackup(t *testing.T) {
 	for _, kind := range []string{"state-drift", "backup-tamper", "manifest-tamper", "key-replaced", "lock-replaced", "backup-symlink", "public-backup"} {
 		t.Run(kind, func(t *testing.T) {
 			r, p, _ := aliasPreviewFixture(t)
-			result, e := ApplyAlias(r, p)
+			result, e := ApplyAlias(r, p, syntheticAliasFence)
 			if e != nil {
 				t.Fatal(e)
 			}
@@ -359,7 +359,7 @@ func TestAliasRollbackRejectsStaleOrTamperedBackup(t *testing.T) {
 				os.Chmod(filepath.Join(result.Transaction, "before.json"), 0644)
 			}
 			before := aliasRead(t, stateFilePath(r.Pool))
-			if _, e = RecoverAlias(r, result.Transaction, true); e == nil {
+			if _, e = RecoverAlias(r, result.Transaction, true, syntheticAliasFence); e == nil {
 				t.Fatal("unsafe rollback admitted")
 			}
 			if !bytes.Equal(before, aliasRead(t, stateFilePath(r.Pool))) {
@@ -395,7 +395,7 @@ func TestAliasCommitBoundaryAndAutomaticRollbackFailClosed(t *testing.T) {
 					return fmt.Errorf("synthetic verification failure after concurrent state change")
 				}
 				return nil
-			})
+			}, syntheticAliasFence)
 			if e == nil || !bytes.Equal(external, aliasRead(t, stateFilePath(r.Pool))) {
 				t.Fatal("stale transaction overwrote changed state")
 			}
@@ -403,5 +403,115 @@ func TestAliasCommitBoundaryAndAutomaticRollbackFailClosed(t *testing.T) {
 				t.Fatal("failed rollback concealed uncertainty")
 			}
 		})
+	}
+}
+
+// This seam is available only in disposable tests. It makes no live exclusion
+// claim and is never selectable through production CLI or environment state.
+func syntheticAliasFence(AliasRequest) (func() error, func(), error) {
+	return func() error { return nil }, func() {}, nil
+}
+
+func TestAliasMutationRequiresHeldWriterFence(t *testing.T) {
+	r, p, _ := aliasPreviewFixture(t)
+	before := snapshotPoolFiles(t, r.Pool)
+	if _, e := ApplyAlias(r, p, nil); e == nil {
+		t.Fatal("pool lock mistaken for legacy writer exclusion")
+	}
+	if _, e := ApplyAlias(r, p, func(AliasRequest) (func() error, func(), error) { return nil, nil, nil }); e == nil {
+		t.Fatal("unheld writer fence admitted")
+	}
+	assertPoolUnchanged(t, r.Pool, before)
+	held := false
+	fence := func(AliasRequest) (func() error, func(), error) {
+		held = true
+		return func() error {
+			if !held {
+				return fmt.Errorf("synthetic fence lost")
+			}
+			return nil
+		}, func() { held = false }, nil
+	}
+	result, e := applyAlias(r, p, func(stage string) error {
+		if !held {
+			t.Fatal("writer fence released before commit/verification")
+		}
+		if stage == "verify" {
+			lock, e := openInspectionFile(lockFilePath(r.Pool))
+			if e != nil {
+				t.Fatal(e)
+			}
+			defer lock.Close()
+			if e = tryLockFile(lock); e == nil {
+				unlockFile(lock)
+				t.Fatal("transaction released pool lock during strict verification")
+			}
+		}
+		return nil
+	}, fence)
+	if e != nil || held {
+		t.Fatalf("held verification fence: %v", e)
+	}
+	if _, e = RecoverAlias(r, result.Transaction, true, nil); e == nil {
+		t.Fatal("explicit rollback bypassed writer fence")
+	}
+}
+
+func TestAliasCanonicalKeeperStillNeedsPreventionForLogicalDiscovery(t *testing.T) {
+	r, p, _ := aliasPreviewFixture(t)
+	result, e := ApplyAlias(r, p, syntheticAliasFence)
+	if e != nil {
+		t.Fatal(e)
+	}
+	var m aliasManifest
+	if e = StrictAliasJSON(aliasRead(t, filepath.Join(result.Transaction, "manifest.json")), &m); e != nil {
+		t.Fatal(e)
+	}
+	var old State
+	StrictAliasJSON(aliasRead(t, filepath.Join(result.Transaction, "before.json")), &old)
+	logicalPool := filepath.Dir(filepath.Dir(old.Worktrees[1].Path))
+	// Reproduce the legacy algorithm's lexical discovery predicate without
+	// invoking a legacy binary or mutating the actual fixture state.
+	canonicalKeeper := r.Target
+	logicalDiscovered := filepath.Join(logicalPool, r.Name, filepath.Base(r.Target))
+	if filepath.Clean(canonicalKeeper) == filepath.Clean(logicalDiscovered) {
+		t.Fatal("fixture lacks distinct logical spelling")
+	}
+	a, e := os.Stat(canonicalKeeper)
+	if e != nil {
+		t.Fatal(e)
+	}
+	b, e := os.Stat(logicalDiscovered)
+	if e != nil || !os.SameFile(a, b) {
+		t.Fatal("fixture no longer aliases one object")
+	}
+	// Prevention recognizes the same object even when discovery starts at the
+	// logical root. The canonical spelling alone would fail the lexical check.
+	read, e := ReadState(logicalPool)
+	if e != nil || len(read.Worktrees) != 2 {
+		t.Fatalf("prevention from logical root: %v", e)
+	}
+	t.Log("legacy lexical predicate would discover a shadow from logical root; prevention preserves exactly one selected physical registration")
+}
+
+func TestAliasLostWriterFenceStopsCommit(t *testing.T) {
+	r, p, before := aliasPreviewFixture(t)
+	held := true
+	fence := func(AliasRequest) (func() error, func(), error) {
+		return func() error {
+			if !held {
+				return fmt.Errorf("synthetic lost fence")
+			}
+			return nil
+		}, func() { held = false }, nil
+	}
+	result, e := applyAlias(r, p, func(stage string) error {
+		if stage == "before-write" {
+			held = false
+		}
+		return nil
+	}, fence)
+	if e == nil || result.Outcome != "not-applied" || !bytes.Equal(before, aliasRead(t, stateFilePath(r.Pool))) {
+		t.Fatal("lost fence allowed commit")
 	}
 }

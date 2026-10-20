@@ -106,12 +106,42 @@ func InspectLease(poolDir, worktreePath string) (LeaseInspection, error) {
 	if err != nil {
 		return deny()
 	}
+	key, err := readInspectionFile(stateKeyPath(canonicalPool), sha256.Size)
+	if err != nil || len(key) != sha256.Size {
+		return deny()
+	}
+	defer clear(key)
+	inspection, err := inspectLeaseObservation(canonicalPool, canonical, data, key)
+	if err != nil {
+		return deny()
+	}
+	// Corroborate the named lock and unchanged observation before releasing it.
+	lockInfo, lockErr := lock.Stat()
+	namedLock, namedErr := os.Lstat(lockFilePath(canonicalPool))
+	again, stateErr := readInspectionFile(stateFilePath(canonicalPool), 16*1024*1024)
+	againKey, keyErr := readInspectionFile(stateKeyPath(canonicalPool), sha256.Size)
+	currentPath, pathErr := filepath.EvalSymlinks(worktreePath)
+	if lockErr != nil || namedErr != nil || !namedLock.Mode().IsRegular() || !os.SameFile(lockInfo, namedLock) || stateErr != nil || keyErr != nil || !bytes.Equal(data, again) || !bytes.Equal(key, againKey) || pathErr != nil || currentPath != canonical {
+		return deny()
+	}
+	return inspection, nil
+}
+
+// inspectLeaseObservation validates a pinned observation while its caller owns
+// the existing lock. It acquires no lock and never heals or persists state.
+func inspectLeaseObservation(canonicalPool, canonical string, data, key []byte) (LeaseInspection, error) {
+	deny := func() (LeaseInspection, error) {
+		return LeaseInspection{}, fmt.Errorf("cannot corroborate one current durable lease; inspect the pool through its lifecycle owner")
+	}
+	info, err := os.Stat(canonical)
+	if err != nil || !info.IsDir() {
+		return deny()
+	}
 	var state State
 	if err = json.Unmarshal(data, &state); err != nil || state.Version != stateVersion {
 		return deny()
 	}
-	key, err := readInspectionFile(stateKeyPath(canonicalPool), sha256.Size)
-	if err != nil || len(key) != sha256.Size {
+	if len(key) != sha256.Size {
 		return deny()
 	}
 	state = validateStateInventories(state, key, nil)
@@ -145,15 +175,6 @@ func InspectLease(poolDir, worktreePath string) (LeaseInspection, error) {
 		return deny()
 	}
 	if _, err = vcs.FindMainRepoRootFrom(canonical); err != nil {
-		return deny()
-	}
-	// Corroborate the named lock and unchanged observation before releasing it.
-	lockInfo, lockErr := lock.Stat()
-	namedLock, namedErr := os.Lstat(lockFilePath(canonicalPool))
-	again, stateErr := readInspectionFile(stateFilePath(canonicalPool), 16*1024*1024)
-	againKey, keyErr := readInspectionFile(stateKeyPath(canonicalPool), sha256.Size)
-	currentPath, pathErr := filepath.EvalSymlinks(worktreePath)
-	if lockErr != nil || namedErr != nil || !namedLock.Mode().IsRegular() || !os.SameFile(lockInfo, namedLock) || stateErr != nil || keyErr != nil || !bytes.Equal(data, again) || !bytes.Equal(key, againKey) || pathErr != nil || currentPath != canonical {
 		return deny()
 	}
 	return LeaseInspection{SchemaVersion: "treehouse.lease-inspection.v1", Pool: canonicalPool, Name: entry.Name, Path: canonical, Status: StatusLeased, LeaseID: entry.LeaseID, LeaseHolder: entry.LeaseHolder, LeasedAt: entry.LeasedAt}, nil

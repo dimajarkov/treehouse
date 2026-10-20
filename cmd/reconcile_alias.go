@@ -72,12 +72,12 @@ func init() {
 				if approval == "" || approval != digest {
 					return fmt.Errorf("--approve-preview-sha256 must match the exact reviewed preview file")
 				}
-				output, e = pool.ApplyAlias(r, p)
+				output, e = pool.ApplyAlias(r, p, nil)
 			default:
 				if previewPath != "" || transaction == "" || approval != "" {
 					return fmt.Errorf("inspect/rollback require --request and --transaction only")
 				}
-				output, e = pool.RecoverAlias(r, transaction, mode == "rollback")
+				output, e = pool.RecoverAlias(r, transaction, mode == "rollback", nil)
 			}
 			// An uncertain mutation needs a receipt even when the command fails.
 			// Errors and receipts contain no raw state, keys or lease field dump.

@@ -69,6 +69,7 @@ type aliasManifest struct {
 }
 
 type aliasSession struct {
+	writerCheck            func() error
 	request                AliasRequest
 	lock                   *os.File
 	before, key, candidate []byte
@@ -339,6 +340,11 @@ func (s *aliasSession) plan() error {
 	return s.fresh(s.before, true)
 }
 func (s *aliasSession) fresh(expected []byte, original bool) error {
+	if s.writerCheck != nil {
+		if e := s.writerCheck(); e != nil {
+			return e
+		}
+	}
 	p := s.preview
 	r := s.request
 	checks := map[string]string{r.Pool: p.PoolIdentity, r.Target: p.TargetIdentity, stateKeyPath(r.Pool): p.KeyIdentity, lockFilePath(r.Pool): p.LockIdentity}
@@ -443,17 +449,54 @@ func writeAliasExclusive(path string, b []byte) error {
 	return f.Close()
 }
 
+// AliasWriterFence must establish prevention on every owned launch route and
+// exclude existing/waiting legacy writers and new legacy launches until release.
+// A process snapshot, user-supplied boolean, or the pool lock alone cannot do
+// this. No production adapter is available yet: CLI mutations fail closed.
+// The lifecycle owner must supply an independently reviewed adapter; fixture
+// fences live only in test files and cannot be selected by a flag or env var.
+type AliasWriterFence func(AliasRequest) (check func() error, release func(), err error)
+
+func holdAliasWriterFence(r AliasRequest, f AliasWriterFence) (func() error, func(), error) {
+	if f == nil {
+		return nil, nil, fmt.Errorf("legacy writer exclusion unproven: establish reviewed prevention on all owned launch routes and hold a lifecycle-owner fence excluding existing, waiting and future legacy writers; no mutation permitted")
+	}
+	check, release, e := f(r)
+	if e != nil {
+		return nil, nil, e
+	}
+	if release == nil || check == nil {
+		if release != nil {
+			release()
+		}
+		return nil, nil, fmt.Errorf("writer fence did not supply a held verifiable lifetime")
+	}
+	if e = check(); e != nil {
+		release()
+		return nil, nil, e
+	}
+	return check, release, nil
+}
+
 // ApplyAlias is deliberately separate from PreviewAlias. The token only binds
 // reviewed intent and freshness; callers still need explicit operator approval.
-func ApplyAlias(r AliasRequest, p AliasPreview) (AliasResult, error) { return applyAlias(r, p, nil) }
+func ApplyAlias(r AliasRequest, p AliasPreview, fence AliasWriterFence) (AliasResult, error) {
+	return applyAlias(r, p, nil, fence)
+}
 
 // fault is fixture-only dependency injection, never a CLI or environment flag.
-func applyAlias(r AliasRequest, p AliasPreview, fault func(string) error) (AliasResult, error) {
+func applyAlias(r AliasRequest, p AliasPreview, fault func(string) error, fence AliasWriterFence) (AliasResult, error) {
+	check, release, e := holdAliasWriterFence(r, fence)
+	if e != nil {
+		return AliasResult{}, e
+	}
+	defer release()
 	s, e := openAliasSession(r)
 	if e != nil {
 		return AliasResult{}, e
 	}
 	defer s.close()
+	s.writerCheck = check
 	if e = s.plan(); e != nil {
 		return AliasResult{}, e
 	}
@@ -523,7 +566,7 @@ func applyAlias(r AliasRequest, p AliasPreview, fault func(string) error) (Alias
 			return result, e
 		}
 	}
-	if e = s.fresh(s.candidate, false); e == nil && fault != nil {
+	if e = s.verifyCandidate(); e == nil && fault != nil {
 		e = fault("verify")
 	}
 	if e != nil {
@@ -537,6 +580,17 @@ func applyAlias(r AliasRequest, p AliasPreview, fault func(string) error) (Alias
 	result.Outcome = "confirmed"
 	result.StateHash = p.After
 	return result, nil
+}
+
+func (s *aliasSession) verifyCandidate() error {
+	if e := s.fresh(s.candidate, false); e != nil {
+		return e
+	}
+	lease, e := inspectLeaseObservation(s.request.Pool, s.request.Target, s.candidate, s.key)
+	if e != nil || lease.LeaseID != s.request.LeaseID || lease.LeaseHolder != s.request.Holder || !lease.LeasedAt.Equal(s.request.LeasedAt) {
+		return fmt.Errorf("lock-held strict lease validation failed")
+	}
+	return s.fresh(s.candidate, false)
 }
 
 func readAliasBackup(s *aliasSession, dir string) (aliasManifest, []byte, []byte, error) {
@@ -604,12 +658,22 @@ func rollbackAliasSession(s *aliasSession, dir string) error {
 
 // RecoverAlias never reapplies a transaction. Hashes classify lost receipts;
 // rollback is an explicit, separately selected operation with no stale restore.
-func RecoverAlias(r AliasRequest, dir string, rollback bool) (AliasResult, error) {
+func RecoverAlias(r AliasRequest, dir string, rollback bool, fence AliasWriterFence) (AliasResult, error) {
+	var writerCheck func() error
+	if rollback {
+		check, release, e := holdAliasWriterFence(r, fence)
+		if e != nil {
+			return AliasResult{}, e
+		}
+		defer release()
+		writerCheck = check
+	}
 	s, e := openAliasSession(r)
 	if e != nil {
 		return AliasResult{}, e
 	}
 	defer s.close()
+	s.writerCheck = writerCheck
 	m, before, after, e := readAliasBackup(s, dir)
 	if e != nil {
 		return AliasResult{}, e

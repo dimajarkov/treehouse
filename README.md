@@ -430,7 +430,8 @@ The request file contains local ownership metadata and should stay private.
 treehouse reconcile-alias preview --request request.json > preview.json
 shasum -a 256 preview.json
 
-# Separately authorized metadata-only apply, within five minutes of preview.
+# API contract only: CLI apply currently fails closed without an owner fence.
+# Future separately authorized metadata-only apply, within five minutes of preview.
 treehouse reconcile-alias apply --request request.json --preview preview.json \
   --approve-preview-sha256 <reviewed-preview-file-sha256>
 
@@ -446,7 +447,13 @@ Its fresh nonce and HMAC token expire after five minutes and bind the exact requ
 No preview is cached or silently refreshed by apply.
 Apply also requires the SHA256 of the exact reviewed preview file, rejects any drift, and consumes the nonce through an exclusive transaction directory beside the pool.
 Only the keeper's path and inventory digest change, and exactly the selected shadow row is removed; all other rows retain their fields and order.
-The canonical keeper prevents old lexical discovery from manufacturing the shadow again.
+Canonicalizing the keeper does not prevent an old binary invoked through a logical pool root from discovering another alias.
+Before apply, the lifecycle owner must activate reviewed prevention on every owned launch route and hold a writer fence that excludes already-running or waiting legacy writers and prevents new legacy launches until verification or rollback finishes.
+The pool lock and a process snapshot cannot provide that exclusion.
+Do not kill foreign processes to obtain it.
+This source candidate supplies the guarded transaction API and synthetic fence tests; no production writer-fence adapter is available, so the CLI refuses apply and explicit rollback even with a valid preview and approval hash.
+Read-only preview and inspection remain available.
+Stop live mutation if the launch-route inventory, installed prevention, legacy-writer exclusion, or held fence lifetime cannot be independently proven.
 
 Before mutation, apply durably saves original and candidate metadata plus an authenticated manifest in an owner-only directory with private files.
 It never backs up, creates, rotates or changes the key or lock.
