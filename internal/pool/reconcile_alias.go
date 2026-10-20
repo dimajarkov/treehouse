@@ -11,6 +11,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime/debug"
 	"strings"
 	"time"
@@ -96,12 +97,17 @@ func validAliasHash(s string) bool {
 	return e == nil && len(b) == sha256.Size && s == strings.ToLower(s)
 }
 
-// StrictAliasJSON rejects duplicate fields (including nested objects), unknown
-// fields and trailing values. Never discard an unmodelled state field on write.
+// StrictAliasJSON admits only exact declared JSON tags, recursively. Go's
+// decoder also accepts ASCII/Unicode case-folded aliases; admitting those can
+// overwrite one logical ownership field while evading raw-key duplicate checks.
+// Never normalize an unmodelled or ambiguously spelled field on state write.
 func StrictAliasJSON(data []byte, out any) error {
 	d := json.NewDecoder(bytes.NewReader(data))
-	var walk func() error
-	walk = func() error {
+	var walk func(reflect.Type) error
+	walk = func(typ reflect.Type) error {
+		for typ.Kind() == reflect.Pointer {
+			typ = typ.Elem()
+		}
 		tok, e := d.Token()
 		if e != nil {
 			return e
@@ -112,6 +118,17 @@ func StrictAliasJSON(data []byte, out any) error {
 		}
 		switch delim {
 		case '{':
+			fields := map[string]reflect.Type{}
+			if typ.Kind() != reflect.Struct {
+				return fmt.Errorf("JSON object requires a declared struct schema")
+			}
+			for i := 0; i < typ.NumField(); i++ {
+				field := typ.Field(i)
+				tag := strings.Split(field.Tag.Get("json"), ",")[0]
+				if field.PkgPath == "" && tag != "" && tag != "-" {
+					fields[tag] = field.Type
+				}
+			}
 			seen := map[string]bool{}
 			for d.More() {
 				k, e := d.Token()
@@ -122,14 +139,21 @@ func StrictAliasJSON(data []byte, out any) error {
 				if !ok || seen[key] {
 					return fmt.Errorf("duplicate JSON field")
 				}
+				fieldType, canonical := fields[key]
+				if !canonical {
+					return fmt.Errorf("noncanonical or unknown JSON field")
+				}
 				seen[key] = true
-				if e = walk(); e != nil {
+				if e = walk(fieldType); e != nil {
 					return e
 				}
 			}
 		case '[':
+			if typ.Kind() != reflect.Slice && typ.Kind() != reflect.Array {
+				return fmt.Errorf("JSON array requires a declared element schema")
+			}
 			for d.More() {
-				if e := walk(); e != nil {
+				if e := walk(typ.Elem()); e != nil {
 					return e
 				}
 			}
@@ -139,7 +163,11 @@ func StrictAliasJSON(data []byte, out any) error {
 		_, e = d.Token()
 		return e
 	}
-	if e := walk(); e != nil {
+	schema := reflect.TypeOf(out)
+	if schema == nil || schema.Kind() != reflect.Pointer || reflect.ValueOf(out).IsNil() {
+		return fmt.Errorf("non-nil typed JSON destination required")
+	}
+	if e := walk(schema); e != nil {
 		return e
 	}
 	if _, e := d.Token(); e != io.EOF {

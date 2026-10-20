@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -516,5 +517,38 @@ func TestAliasLostWriterFenceStopsCommit(t *testing.T) {
 	}, fence)
 	if e == nil || result.Outcome != "not-applied" || !bytes.Equal(before, aliasRead(t, stateFilePath(r.Pool))) {
 		t.Fatal("lost fence allowed commit")
+	}
+}
+
+func TestAliasJSONCanonicalTagsRejectCaseAndUnicodeAliases(t *testing.T) {
+	for _, tc := range []struct {
+		name, data string
+		out        any
+	}{
+		{"request-same-value", `{"pool":"a","POOL":"a"}`, &AliasRequest{}},
+		{"request-conflict", `{"pool":"a","POOL":"b"}`, &AliasRequest{}},
+		{"request-alias-only", `{"PoOl":"a"}`, &AliasRequest{}},
+		{"unicode-long-s", `{"ſtate_sha256":"a"}`, &AliasRequest{}},
+		{"unicode-kelvin-k", `{"Keeper_sha256":"a"}`, &AliasRequest{}},
+		{"state-nested-same", `{"version":4,"worktrees":[{"lease_id":"a","LEASE_ID":"a"}]}`, &State{}},
+		{"state-nested-conflict", `{"version":4,"worktrees":[{"lease_holder":"a","LeAsE_HoLdEr":"b"}]}`, &State{}},
+		{"state-root-case", `{"Version":4,"worktrees":[]}`, &State{}},
+		{"preview-same", `{"token":"a","TOKEN":"a"}`, &AliasPreview{}},
+		{"preview-conflict", `{"before_sha256":"a","BEFORE_SHA256":"b"}`, &AliasPreview{}},
+		{"manifest-request", `{"request":{"pool":"a","POOL":"a"}}`, &aliasManifest{}},
+		{"manifest-preview", `{"preview":{"nonce":"a","NONCE":"b"}}`, &aliasManifest{}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if e := StrictAliasJSON([]byte(tc.data), tc.out); e == nil {
+				t.Fatal("noncanonical ownership field accepted")
+			}
+		})
+	}
+	r, _, _ := aliasPreviewFixture(t)
+	for _, v := range []any{r, State{Version: 4}, AliasPreview{}, aliasManifest{Request: r}} {
+		out := reflect.New(reflect.TypeOf(v)).Interface()
+		if e := StrictAliasJSON(aliasJSON(v), out); e != nil {
+			t.Fatalf("canonical generated schema rejected: %v", e)
+		}
 	}
 }
