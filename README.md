@@ -413,6 +413,51 @@ Treehouse compares supplied conditions while holding the pool state lock. A miss
 
 For backward compatibility, `treehouse return <path>` without either condition keeps its original unconditional path-only behavior. Existing path-only scripts and `treehouse get --lease` stdout are unchanged.
 
+### Reconciling one alias duplicate
+
+`reconcile-alias` is an explicit metadata-owner operation for exactly two registrations of the same Git worktree: one retained durable lease and one inert unleased shadow.
+It does not return, reacquire, reset or delete a worktree, run recovery, enumerate processes, or repair other entries.
+A source candidate or preview is not operator permission to apply a live repair.
+Obtain exact-target approval after reviewing the preview and retain that approval separately.
+
+Create a private request JSON containing `pool` and `target` as canonical absolute physical paths, `name`, the retained `lease_id`, `holder`, `leased_at`, and exact `state_sha256`, `keeper_sha256`, `shadow_sha256` predicates.
+The state hash covers original file bytes; row hashes cover Go `encoding/json.Marshal(pool.WorktreeEntry)` at the reviewed source revision.
+These predicates come from a separately reviewed read-only diagnosis, never from guessed ownership or automatic discovery.
+The request file contains local ownership metadata and should stay private.
+
+```sh
+# Observe only; review this file before obtaining apply approval.
+treehouse reconcile-alias preview --request request.json > preview.json
+shasum -a 256 preview.json
+
+# Separately authorized metadata-only apply, within five minutes of preview.
+treehouse reconcile-alias apply --request request.json --preview preview.json \
+  --approve-preview-sha256 <reviewed-preview-file-sha256>
+
+# Read-only classification if the apply result is lost.
+treehouse reconcile-alias inspect --request request.json --transaction <exact-backup-directory>
+
+# Explicit rollback, only while the exact candidate remains current.
+treehouse reconcile-alias rollback --request request.json --transaction <exact-backup-directory>
+```
+
+Preview takes the existing lock nonblocking, validates the existing key and every inventory, and changes no files.
+Its fresh nonce and HMAC token expire after five minutes and bind the exact request, before/candidate/sibling hashes, key, lock, state, checkout, Git marker and repository identities.
+No preview is cached or silently refreshed by apply.
+Apply also requires the SHA256 of the exact reviewed preview file, rejects any drift, and consumes the nonce through an exclusive transaction directory beside the pool.
+Only the keeper's path and inventory digest change, and exactly the selected shadow row is removed; all other rows retain their fields and order.
+The canonical keeper prevents old lexical discovery from manufacturing the shadow again.
+
+Before mutation, apply durably saves original and candidate metadata plus an authenticated manifest in an owner-only directory with private files.
+It never backs up, creates, rotates or changes the key or lock.
+Keep the backup private and retained; it includes the full pool metadata.
+No backup cleanup or global repair is included.
+A verification failure attempts guarded exact-byte rollback while retaining the lock.
+If another actor changed state or filesystem identity, rollback refuses to overwrite it and reports uncertainty.
+An interrupted apply is classified from authenticated before/candidate hashes, never automatically replayed.
+A state matching the candidate means applied with the receipt still unconfirmed, not proof of a runtime or browser flow.
+Windows reconciliation is deliberately unsupported until owner/ACL and durable directory-sync semantics have runtime proof; read-only lease inspection remains independently supported.
+
 ### Recovering missing pool state
 
 Treehouse writes `treehouse-state.json` atomically, so a crash mid-write should leave the previous state file intact.

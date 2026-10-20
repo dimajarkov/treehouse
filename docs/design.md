@@ -25,6 +25,18 @@ Each entry records why the code is shaped the way it is, so read the relevant on
   Its versioned single-entry JSON array contains lease identity only, without `processes` or a quietness claim.
   Callers must re-run it at every admission boundary and still corroborate their process, source and runtime separately; this query never extends a lease or caches authority.
 
+- Alias reconciliation (`internal/pool/reconcile_alias.go`) is an explicit state-owner transaction, not a recovery heuristic.
+  It accepts only an exact authenticated empty-inventory keeper/shadow pair on one physical Git worktree, with the original lease tuple and full row fingerprints supplied by the operator.
+  Preview holds the existing nonblocking lock without `WithStateLock` or `ReadState`, rejects unmodelled/duplicate JSON fields, and binds fresh filesystem identities to a five-minute HMAC token without persisting anything.
+  Apply requires that preview plus the reviewed preview-file hash, revalidates every predicate under the same lock, and creates an exclusive fsynced private backup with an authenticated manifest before the atomic state replacement.
+  It builds the candidate directly from validated rows, changing only keeper path/digest and removing the shadow; `prepareStateForWrite` is deliberately bypassed because its key creation and sibling normalization are outside this authority.
+  Only the existing key signs the one changed inventory, and every sibling's authenticated fields and order remain unchanged.
+  Recovery compares authenticated original/candidate byte hashes; it never replays an apply, and rollback refuses changed state, key, lock, target, Git marker, repository or ownership.
+  An atomic-write or lost-receipt error is accepted-but-unconfirmed until that classification, never assumed to be rejection.
+  The exclusive nonce directory prevents token replay even after rollback; backups are retained without automatic cleanup.
+  Windows refuses this mutation until equivalent ACL/owner and directory durability semantics have runtime proof.
+  README's alias reconciliation section owns the operator procedure and separate live-apply approval boundary.
+
 - `get --lease` (see `getLeaseRunE`) is the non-interactive acquire: it opens no subshell, routes hook output and banners to stderr, and keeps path-only stdout unchanged. `get --lease --json` returns `pool.AcquireLeaseInfo`, and `status --json` exposes the same `lease_id`, holder, and timestamp. Conditional return uses `pool.ReleaseConditional` with `--if-lease-id` and optional `--if-lease-holder`; comparison, caller-side preparation, reset, and final clear share one `WithStateLock`, while return without conditions keeps the legacy path-only behavior
 - Dirty checks include untracked files even when repository config hides them from normal `git status` output
 - Prune deletes only idle managed worktrees that are clean and whose HEAD is merged into the default branch or the slot's recorded explicit base branch; dry run is the default

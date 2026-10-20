@@ -37,7 +37,7 @@ so that multiple AI coding agents can work on the same repo in parallel.`,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		// This explicit observation must not spawn a cache-writing updater.
 		// Changed also covers an invalid empty path: refusals stay read-only.
-		if cmd == statusCmd && cmd.Flags().Changed("lease-path") {
+		if cmd.Parent() == reconcileAliasCmd || cmd == reconcileAliasCmd || (cmd == statusCmd && cmd.Flags().Changed("lease-path")) {
 			return
 		}
 		// Skip update check for dev builds, Nix store installs (upgraded
