@@ -340,6 +340,23 @@ func recoverMissingStateEntries(poolDir string, s State) (State, error) {
 			if known[filepath.Clean(wtPath)] {
 				continue
 			}
+			// Preserve a stored alias and its lease rather than discovering a
+			// second registration for the same filesystem object.
+			candidateInfo, err := entry.Info()
+			if err != nil {
+				return State{}, fmt.Errorf("inspecting discovered checkout %s: %w", wtPath, err)
+			}
+			registered := false
+			for _, existing := range s.Worktrees {
+				info, err := os.Stat(existing.Path)
+				if err == nil && os.SameFile(info, candidateInfo) {
+					registered = true
+					break
+				}
+			}
+			if registered {
+				continue
+			}
 			if wt, ok := recoverOneWorktree(slot.Name(), wtPath); ok {
 				s.Worktrees = append(s.Worktrees, wt)
 			}
