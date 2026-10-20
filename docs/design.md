@@ -74,3 +74,22 @@ Each entry records why the code is shaped the way it is, so read the relevant on
 - `.github/scripts/no-mistakes-gate.sh` survives for ONE consumer: `release.yml`'s `release-pr-gate-status` job (see the next bullet). Its structural release-please test is therefore still load-bearing, not dead code, and `TestNoMistakesGateDecisions` drives the script directly.
 - release-please opens its PRs with `GITHUB_TOKEN`, so GitHub creates **no** workflow runs on them and the gate can never report there. `release.yml`'s `release-pr-gate-status` job publishes the required context on the release PR head by running that same gate script, so release PRs go green without an owner override.
 - A workflow backing a required check must never use `paths`/`paths-ignore`: a filtered required check never reports and blocks the PR forever. `TestPullRequestWorkflowsExcludeReleasePleaseOutputs` encodes both that rule and the opposite rule for ordinary PR workflows.
+
+## Owner launch admission (source-only prototype)
+
+`internal/pool/launch_admission.go` supplies a shared per-pool command hold and the exclusive repair counterpart.
+The existing private `treehouse-launch-admission.lock` must be provisioned only during separately approved owner maintenance; these APIs never create it or read/write lifecycle state.
+The owned wrapper bridge must resolve the exact effective pool with the existing configuration/VCS resolver, keep the shared hold for the complete backing command lifetime, and continuously check the pinned executable route while supervising it.
+Repair combines independently held launch-owner maintenance quiescence with the exclusive gate; only after both are held may the state owner acquire the existing pool lock.
+The owner must pause/control its launchers, establish reviewed prevention on all owned routes, and prove pre-gate legacy commands and pool-lock waiters exited voluntarily.
+The new gate cannot infer that earlier drain; unknown or foreign writers require refusal rather than process termination.
+Route activation and gate provisioning must occur under that same owner maintenance exclusion so a shared holder cannot race an artifact replacement.
+Wrapper/backing inode/hash and named gate identity remain checked at transaction boundaries; loss prevents commit or stale rollback.
+Release ordering is pool transaction first, exclusive gate second, launch-owner quiescence last.
+A repair path must not acquire a shared outer gate and then recursively seek its exclusive counterpart.
+The existing external-volume/configuration guard remains before admission and unchanged; do not derive pool names by copying the VCS origin-hash algorithm into a shell wrapper.
+
+This prototype is not wired to Cobra or the installed wrapper and has no production launch-owner quiescence implementation.
+CLI mutation still passes a nil fence and remains disabled.
+The current user-local installation owner only permits backing replacement while preserving the wrapper, so activating an admission wrapper requires separately reviewed exact owner-maintenance authority and an explicit extension to that owner procedure.
+Do not activate this source by running Home Manager, a global installer, self-update or a profile migration.
