@@ -30,7 +30,7 @@ Each entry records why the code is shaped the way it is, so read the relevant on
   Preview holds the existing nonblocking lock without `WithStateLock` or `ReadState`, rejects unmodelled/duplicate JSON fields, and binds fresh filesystem identities to a five-minute HMAC token without persisting anything.
   Apply requires that preview plus the reviewed preview-file hash, revalidates every predicate under the same lock, and creates an exclusive fsynced private backup with an authenticated manifest before the atomic state replacement.
   It builds the candidate directly from validated rows, changing only keeper path/digest and removing the shadow; `prepareStateForWrite` is deliberately bypassed because its key creation and sibling normalization are outside this authority.
-  Only the existing key signs the one changed inventory, and every sibling's authenticated fields and order remain unchanged.
+  Only the existing key signs the one changed inventory; every sibling's typed fields and order remain unchanged and are pinned by full state/sibling hashes. Unrelated already-recovered, leased, unknown-inventory rows may remain quarantined without authentication or healing; selected rows and known inventories must authenticate. Every row still requires a verifiable filesystem identity, so a quarantined third physical/name claim cannot be ignored.
   Recovery compares authenticated original/candidate byte hashes; it never replays an apply, and rollback refuses changed state, key, lock, target, Git marker, repository or ownership.
   An atomic-write or lost-receipt error is accepted-but-unconfirmed until that classification, never assumed to be rejection.
   The exclusive nonce directory prevents token replay even after rollback; backups are retained without automatic cleanup.
@@ -115,3 +115,5 @@ If that complete owner scope is unknown, stop without activating or touching poo
 Post-bootstrap, every controlled launcher holds the cooperative owner boundary shared for its full command lifetime; exclusive maintenance cannot proceed until those actors finish.
 The backing child's independently inherited kernel descriptions preserve exclusion if its supervisor is killed.
 Policy/gate/backing identities are checked before lifecycle I/O; no environment marker without matching live handles can establish admission.
+
+Installed policy presence also closes direct backing lifecycle dispatch before state reads, including malformed or symlinked policy. Targeted `return`/`destroy` checks use their actual logical and physical path targets independently of cwd, and preserve structural pool resolution when repository config is damaged. Configuration-only inspection uses the same precedence without emitting the lifecycle command's ignored-hook warning a second time. Unprovisioned pools keep their previous dispatch behavior; direct reconciliation preview/inspection remain available and mutation still requires the injected held writer fence.

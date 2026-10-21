@@ -41,7 +41,7 @@ so that multiple AI coding agents can work on the same repo in parallel.`,
 		return nil
 	},
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-		if err := verifyAdmissionChild(); err != nil {
+		if err := verifyAdmissionChild(cmd); err != nil {
 			return err
 		}
 		// This explicit observation must not spawn a cache-writing updater.

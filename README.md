@@ -442,7 +442,7 @@ treehouse reconcile-alias inspect --request request.json --transaction <exact-ba
 treehouse reconcile-alias rollback --request request.json --transaction <exact-backup-directory>
 ```
 
-Preview takes the existing lock nonblocking, validates the existing key and every inventory, and changes no files.
+Preview takes the existing lock nonblocking, validates the existing key, selected keeper/shadow inventories and other known inventories, and changes no files. Unrelated recovered rows with unknown inventories remain leased and quarantined with their fields/order preserved; they are neither authenticated nor healed. Every registered filesystem identity must still be verifiable, and any third claim to the selected name or checkout refuses repair.
 Its fresh nonce and HMAC token expire after five minutes and bind the exact request, before/candidate/sibling hashes, key, lock, state, checkout, Git marker and repository identities.
 No preview is cached or silently refreshed by apply.
 Apply also requires the SHA256 of the exact reviewed preview file, rejects any drift, and consumes the nonce through an exclusive transaction directory beside the pool.

@@ -303,7 +303,14 @@ func (s *aliasSession) plan() error {
 	names, matches := 0, 0
 	var siblings []WorktreeEntry
 	for i, w := range state.Worktrees {
-		if !w.SeedInventoryKnown || !validSeedInventory(w.SeededPaths) || !validSeedMetadata(w) || !validSeedInventoryDigest(s.key, w) {
+		h := aliasHash(aliasJSON(w))
+		selected := h == r.KeeperHash || h == r.ShadowHash
+		authenticated := w.SeedInventoryKnown && validSeedInventory(w.SeededPaths) && validSeedMetadata(w) && validSeedInventoryDigest(s.key, w)
+		// An unrelated existing quarantine is preserved, not healed or trusted.
+		// Full state/sibling hashes still pin its fields and ordering. Selected
+		// rows and known inventories must authenticate before any mutation.
+		retainedQuarantine := !selected && !w.SeedInventoryKnown && w.Leased && w.LeaseHolder == RecoveredLeaseHolder && validSeedInventory(w.SeededPaths) && validSeedMetadata(w)
+		if !authenticated && !retainedQuarantine {
 			return fmt.Errorf("unauthenticated inventory; no healing permitted")
 		}
 		wi, e := os.Stat(w.Path)
@@ -317,7 +324,6 @@ func (s *aliasSession) plan() error {
 		if same {
 			matches++
 		}
-		h := aliasHash(aliasJSON(w))
 		switch h {
 		case r.KeeperHash:
 			if keeper >= 0 {

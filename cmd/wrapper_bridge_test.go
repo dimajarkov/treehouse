@@ -119,7 +119,26 @@ func TestCopiedWrapperBridgePreviewApplyAndCooperativeDrain(t *testing.T) {
 	if status == 0 || denied != "" || !strings.Contains(reason, "not drained") {
 		t.Fatalf("legacy waiter admitted: %s", reason)
 	}
+
+	// A direct backing call must refuse even when a legacy buffered wrapper
+	// reaches the new executable while maintenance owns exclusive admission.
 	voluntary()
+	_, exclusive, e := pool.HoldLaunchOwner(dir, true)
+	if e != nil {
+		t.Fatal(e)
+	}
+	direct := exec.Command(backing, "status", "--json")
+	direct.Dir = repo
+	direct.Env = buildEnv(home)
+	directOutput, directLaunchErr := direct.CombinedOutput()
+	exclusive()
+	if directLaunchErr == nil || !strings.Contains(string(directOutput), "requires admitted launch") {
+		t.Fatalf("direct backing bypassed installed admission: %s", directOutput)
+	}
+	directState, _ := os.ReadFile(filepath.Join(dir, "treehouse-state.json"))
+	if !bytes.Equal(before, directState) {
+		t.Fatal("direct backing modified state during maintenance")
+	}
 	out, stderr, code = run(nil, applyArgs...)
 	if code != 0 {
 		t.Fatalf("copied wrapper apply: %s", stderr)
