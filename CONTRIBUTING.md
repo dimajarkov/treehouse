@@ -1,11 +1,13 @@
 # Contributing to Treehouse
 
-Thanks for your interest in contributing!
+This maintained fork publishes to `dimajarkov/treehouse`.
+Keep `origin` set to `https://github.com/dimajarkov/treehouse.git`.
+The original `kunchenguid/treehouse` repository is read-only upstream; opening a contribution there requires separate explicit authorization.
 
 ## Getting Started
 
 ```sh
-git clone https://github.com/kunchenguid/treehouse.git
+git clone https://github.com/dimajarkov/treehouse.git
 cd treehouse
 make build
 make test
@@ -32,12 +34,9 @@ attestation whose `head_sha` matches the PR head; a hand-added marker is not eno
 curl -fsSL https://raw.githubusercontent.com/kunchenguid/no-mistakes/main/docs/install.sh | sh
 no-mistakes doctor   # needs git + a supported agent runner + gh
 
-# no-mistakes opens PRs against your `origin` remote, so origin must point to
-# the parent (kunchenguid/treehouse). If you cloned the parent directly you're
-# already set; if you cloned your fork instead, reset origin first:
-#   git remote set-url origin https://github.com/kunchenguid/treehouse.git
-# Then point the gate at your fork via --fork-url. The gate pushes validated
-# branches to your fork while opening PRs against the parent (origin).
+# The gate targets origin. Keep it on Dmitri's repository.
+git remote set-url origin https://github.com/dimajarkov/treehouse.git
+# Contributor forks may use their own fork URL while still targeting this origin.
 no-mistakes init --fork-url https://github.com/<you>/treehouse.git
 ```
 
@@ -54,8 +53,8 @@ no-mistakes axi run --intent "<what you set out to accomplish>"
 # until outcome: checks-passed
 ```
 
-The gate pushes your branch to your fork, opens (or updates) the PR against the parent
-repo, and writes the attestation into the PR body. Once the pipeline hits
+The gate pushes your branch to your fork, opens (or updates) the PR against the configured origin
+repository, and writes the attestation into the PR body. Once the pipeline hits
 `checks-passed`, the `PR must be raised via no-mistakes` check goes green on its own.
 
 ### Workflow file changes
@@ -95,7 +94,7 @@ for the full walkthrough.
 
 ## Reporting Issues
 
-Open a [GitHub issue](https://github.com/kunchenguid/treehouse/issues) with steps to reproduce. Include your OS, architecture, and treehouse version (`treehouse --version`).
+Open a [GitHub issue](https://github.com/dimajarkov/treehouse/issues) with steps to reproduce. Include your OS, architecture, and treehouse version (`treehouse --version`).
 
 ## License
 

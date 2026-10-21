@@ -154,6 +154,17 @@ func ResolveWorktreePath(flagTemplate string, cfg Config) string {
 }
 
 func Load(repoRoot string) (Config, error) {
+	return load(repoRoot, true)
+}
+
+// LoadForInspection preserves configuration precedence without emitting the
+// execution-time warning about ignored repository hooks. Admission checks use
+// it before dispatch; the owning lifecycle command emits its own warnings.
+func LoadForInspection(repoRoot string) (Config, error) {
+	return load(repoRoot, false)
+}
+
+func load(repoRoot string, warnHooks bool) (Config, error) {
 	cfg := DefaultConfig()
 
 	repoPath := filepath.Join(repoRoot, "treehouse.toml")
@@ -167,7 +178,9 @@ func Load(repoRoot string) (Config, error) {
 		// Repo-level hooks are discarded so that a command run in an
 		// untrusted clone cannot execute checked-in shell. Say so, once,
 		// instead of dropping them silently.
-		warnRepoHooks(os.Stderr, repoPath, md)
+		if warnHooks {
+			warnRepoHooks(os.Stderr, repoPath, md)
+		}
 		cfg.Hooks = Hooks{}
 	}
 

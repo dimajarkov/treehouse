@@ -118,7 +118,13 @@ func TestUpdateNoticeSilentInNixStore(t *testing.T) {
 		spawnBackgroundCheck = func(string) error { spawned++; return nil }
 		t.Cleanup(func() { spawnBackgroundCheck = prev })
 
-		out := captureStderr(t, func() { rootCmd.PersistentPreRun(probe, nil) })
+		out := captureStderr(t, func() {
+			func() {
+				if e := rootCmd.PersistentPreRunE(probe, nil); e != nil {
+					t.Fatal(e)
+				}
+			}()
+		})
 		if !strings.Contains(out, "A new version of treehouse is available") {
 			t.Fatalf("control run printed no notice: %q", out)
 		}
@@ -134,7 +140,13 @@ func TestUpdateNoticeSilentInNixStore(t *testing.T) {
 		spawnBackgroundCheck = func(string) error { spawned++; return nil }
 		t.Cleanup(func() { spawnBackgroundCheck = prev })
 
-		out := captureStderr(t, func() { rootCmd.PersistentPreRun(probe, nil) })
+		out := captureStderr(t, func() {
+			func() {
+				if e := rootCmd.PersistentPreRunE(probe, nil); e != nil {
+					t.Fatal(e)
+				}
+			}()
+		})
 		if out != "" {
 			t.Fatalf("notice printed in the Nix store: %q", out)
 		}
@@ -145,7 +157,13 @@ func TestUpdateNoticeSilentInNixStore(t *testing.T) {
 		if err := os.Remove(filepath.Join(home, ".treehouse", "update-check.json")); err != nil {
 			t.Fatal(err)
 		}
-		captureStderr(t, func() { rootCmd.PersistentPreRun(probe, nil) })
+		captureStderr(t, func() {
+			func() {
+				if e := rootCmd.PersistentPreRunE(probe, nil); e != nil {
+					t.Fatal(e)
+				}
+			}()
+		})
 		if spawned != 0 {
 			t.Fatalf("background check spawned %d time(s) for a stale cache in the Nix store, want 0", spawned)
 		}
@@ -160,7 +178,13 @@ func TestUpdateNoticeSilentInNixStore(t *testing.T) {
 		spawnBackgroundCheck = func(string) error { spawned++; return nil }
 		t.Cleanup(func() { spawnBackgroundCheck = prev })
 
-		captureStderr(t, func() { rootCmd.PersistentPreRun(probe, nil) })
+		captureStderr(t, func() {
+			func() {
+				if e := rootCmd.PersistentPreRunE(probe, nil); e != nil {
+					t.Fatal(e)
+				}
+			}()
+		})
 		if spawned != 1 {
 			t.Fatalf("control run spawned %d background check(s), want 1", spawned)
 		}

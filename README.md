@@ -1,5 +1,10 @@
 <h1 align="center">treehouse</h1>
 
+This is [Dmitri's maintained fork](https://github.com/dimajarkov/treehouse) of [Kun Chen's original Treehouse](https://github.com/kunchenguid/treehouse).
+The original MIT copyright and Go module path remain intact.
+`origin` must point to `dimajarkov/treehouse`; the original repository is a read-only `upstream`.
+
+
 <p align="center">
   <a href="https://github.com/kunchenguid/treehouse/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/kunchenguid/treehouse/ci.yml?style=flat-square&label=CI" /></a>
   <a href="https://github.com/kunchenguid/treehouse/actions/workflows/release.yml"><img alt="Release" src="https://img.shields.io/github/actions/workflow/status/kunchenguid/treehouse/release.yml?style=flat-square&label=Release" /></a>
@@ -41,58 +46,30 @@ $ exit                         # exit the subshell when you're done
 
 ## Install
 
-**macOS / Linux**
+Dmitri's guarded macOS installation is owned by [dimajarkov/dotfiles](https://github.com/dimajarkov/dotfiles).
+That repository pins an immutable revision from this fork and provides a feature-only Nix installer for the regular wrapper/backing pair and its launch-admission policy.
+Use the pinned dotfiles installation when operating an existing managed pool; a generic installer cannot safely replace that pair.
+
+For an isolated evaluation of this fork, pin its exact commit:
 
 ```sh
-curl -fsSL https://kunchenguid.github.io/treehouse/install.sh | sh
-```
-
-**Windows (PowerShell)**
-
-```powershell
-irm https://kunchenguid.github.io/treehouse/install.ps1 | iex
-```
-
-**Nix**
-
-```sh
-nix run github:kunchenguid/treehouse
-# or pin a specific release tag:
-nix run github:kunchenguid/treehouse/v3.1.2
-```
-
-Install into your Nix profile:
-
-```sh
-nix profile add github:kunchenguid/treehouse
-```
-
-Or add to your flake inputs:
-
-```nix
-treehouse = {
-  url = "github:kunchenguid/treehouse";
-  inputs.nixpkgs.follows = "nixpkgs";
-};
+nix run github:dimajarkov/treehouse/<commit>
 ```
 
 The flake exposes `#default` and `#treehouse` package outputs, plus `apps` for `nix run`.
-
-A Nix install upgrades through Nix: `treehouse update` refuses to run from the Nix store and the update notice stays silent there.
-
-**Go**
-
-```sh
-go install github.com/kunchenguid/treehouse/v3@latest
-```
+A Nix install upgrades through Nix; use the dotfiles owner procedure for the guarded macOS installation.
 
 **From source**
 
 ```sh
-git clone https://github.com/kunchenguid/treehouse.git
+git clone https://github.com/dimajarkov/treehouse.git
 cd treehouse
-make install
+git switch codex/physical-identity-and-guarded-repair
+make build
+make test
 ```
+
+The original author's generic installers and `go install` module distribution follow the original upstream, so they do not install this fork's fixes.
 
 ## How It Works
 
@@ -325,6 +302,23 @@ With `--no-fetch`, Treehouse resets or creates the worktree from existing local 
 
 `treehouse status --json` returns an array with `name`, `path`, `status`, `branch`, `detached`, `branch_error`, `recovery_reason`, `recovery_backup`, `flavor`, `lease_id`, `lease_holder`, `leased_at`, and `processes`. `recovery_reason` is set when an unsafe recovered lease remains quarantined. `recovery_backup` is the slot's recovery backup folder, set while that folder holds anything. `branch` names the checked-out branch of a git slot on a branch; it is empty for a detached HEAD, a jj slot, and a markerless (damaged) slot. `detached` is `true` only for a git slot on a detached HEAD (the state `treehouse get` leaves by default) and is omitted when false; `branch_error` is set when a slot's branch could not be read, so a read failure is never mistaken for a detached HEAD or an empty branch. `processes` is what `treehouse return` would terminate in that worktree, not every process whose working directory is inside it: the calling process and its ancestors are excluded, so running `status` from inside a pooled worktree reports what is resident in the slot instead of the shell you typed the command into. When the process table itself cannot be read, `status` is `unverified` and `processes` is empty: whether anything is running there is unknown, so the slot is not reported `available`, `dirty`, or `in-use`, and the error is printed as a warning on stderr. A lease, an owner reservation, or the slot you are standing in is still reported as such, because those facts do not depend on the scan. `flavor` is the backend the worktree's own marker identifies (`"git"` or `"jj"`) and is omitted when no marker is found. Non-leased entries use empty lease strings and a `null` timestamp. State files written before lease identities remain readable; their existing leases have an empty `lease_id` until released and acquired again.
 
+### Read-only lease inspection
+
+For a fresh lease identity without pool-wide process scans or lifecycle recovery, run:
+
+```sh
+treehouse status --lease-path /absolute/path/to/worktree --json
+```
+
+This explicit mode returns one array entry with `schema_version: "treehouse.lease-inspection.v1"`, the canonical `pool` and `path`, `name`, `status: "leased"`, `lease_id`, `lease_holder`, and `leased_at`.
+It requires current, validated persisted state and an existing available pool lock.
+It refuses contention immediately and denies missing, corrupt, legacy, quarantined, damaged or ambiguous state without creating files, repairing the pool, or starting the update checker.
+It accepts an absolute symlink alias only when it resolves to exactly one registered canonical worktree.
+Unlike ordinary `status`, it does not heal state, enumerate processes, check sibling branches or imply that the worktree is idle; the result omits `processes`.
+Automation must invoke it afresh around each protected operation and retain its independent process, source and runtime checks.
+A nonzero exit or unsupported mode is a denial, never permission to reuse a previous successful result.
+
+
 Release a lease with `treehouse return <path>`, which terminates lingering processes and verifies that no foreign process remains before it resets the worktree, clears the lease, and returns the worktree to the pool.
 If process termination or that verification fails, the command exits nonzero and leaves the worktree and lease in place instead of recycling a slot that may still be in use.
 A non-interactive dirty return aborts without cleaning: prune will not reclaim that slot. Retry by pasting the printed `treehouse return --force <quoted-path>` hint (shell-quoted so copy-paste does not expand metacharacters). `--force` with no path only works from inside a repository.
@@ -395,6 +389,59 @@ treehouse return --force \
 Treehouse compares supplied conditions while holding the pool state lock. A missing lease or mismatch exits nonzero before process termination, worktree reset, or state clearing. The same lock fences a matching return through the final clear, so the identity succeeds once and cannot release a later acquisition of the same path. `--if-lease-holder` is optional; use `--if-lease-id` for ABA protection when a holder may be reused.
 
 For backward compatibility, `treehouse return <path>` without either condition keeps its original unconditional path-only behavior. Existing path-only scripts and `treehouse get --lease` stdout are unchanged.
+
+### Reconciling one alias duplicate
+
+`reconcile-alias` is an explicit metadata-owner operation for exactly two registrations of the same Git worktree: one retained durable lease and one inert unleased shadow.
+It does not return, reacquire, reset or delete a worktree, run recovery, enumerate processes, or repair other entries.
+A source candidate or preview is not operator permission to apply a live repair.
+Obtain exact-target approval after reviewing the preview and retain that approval separately.
+
+Create a private request JSON containing `pool` and `target` as canonical absolute physical paths, `name`, the retained `lease_id`, `holder`, `leased_at`, and exact `state_sha256`, `keeper_sha256`, `shadow_sha256` predicates.
+The state hash covers original file bytes; row hashes cover Go `encoding/json.Marshal(pool.WorktreeEntry)` at the reviewed source revision.
+These predicates come from a separately reviewed read-only diagnosis, never from guessed ownership or automatic discovery.
+The request file contains local ownership metadata and should stay private.
+
+```sh
+# Observe only; review this file before obtaining apply approval.
+treehouse reconcile-alias preview --request request.json > preview.json
+shasum -a 256 preview.json
+
+# API contract only: CLI apply currently fails closed without an owner fence.
+# Future separately authorized metadata-only apply, within five minutes of preview.
+treehouse reconcile-alias apply --request request.json --preview preview.json \
+  --approve-preview-sha256 <reviewed-preview-file-sha256>
+
+# Read-only classification if the apply result is lost.
+treehouse reconcile-alias inspect --request request.json --transaction <exact-backup-directory>
+
+# Explicit rollback, only while the exact candidate remains current.
+treehouse reconcile-alias rollback --request request.json --transaction <exact-backup-directory>
+```
+
+Preview takes the existing lock nonblocking, validates the existing key, selected keeper/shadow inventories and other known inventories, and changes no files. Unrelated recovered rows with unknown inventories remain leased and quarantined with their fields/order preserved; they are neither authenticated nor healed. Every registered filesystem identity must still be verifiable, and any third claim to the selected name or checkout refuses repair.
+Its fresh nonce and HMAC token expire after five minutes and bind the exact request, before/candidate/sibling hashes, key, lock, state, checkout, Git marker and repository identities.
+No preview is cached or silently refreshed by apply.
+Apply also requires the SHA256 of the exact reviewed preview file, rejects any drift, and consumes the nonce through an exclusive transaction directory beside the pool.
+Only the keeper's path and inventory digest change, and exactly the selected shadow row is removed; all other rows retain their fields and order.
+Canonicalizing the keeper does not prevent an old binary invoked through a logical pool root from discovering another alias.
+Before apply, the lifecycle owner must activate reviewed prevention on every owned launch route and hold a writer fence that excludes already-running or waiting legacy writers and prevents new legacy launches until verification or rollback finishes.
+The pool lock and a process snapshot cannot provide that exclusion.
+Do not kill foreign processes to obtain it.
+The guarded wrapper bridge supplies shared command admission, inherited child locks, and exclusive cooperative launch-owner maintenance for apply/rollback.
+Direct repair invocation still refuses mutation; the admitted path requires existing private owner policy and locks provisioned only after separately proven owner coverage and voluntary legacy drain.
+Read-only preview and inspection remain available.
+Stop live mutation if the launch-route inventory, installed prevention, legacy-writer exclusion, or held fence lifetime cannot be independently proven.
+
+Before mutation, apply durably saves original and candidate metadata plus an authenticated manifest in an owner-only directory with private files.
+It never backs up, creates, rotates or changes the key or lock.
+Keep the backup private and retained; it includes the full pool metadata.
+No backup cleanup or global repair is included.
+A verification failure attempts guarded exact-byte rollback while retaining the lock.
+If another actor changed state or filesystem identity, rollback refuses to overwrite it and reports uncertainty.
+An interrupted apply is classified from authenticated before/candidate hashes, never automatically replayed.
+A state matching the candidate means applied with the receipt still unconfirmed, not proof of a runtime or browser flow.
+Windows reconciliation is deliberately unsupported until owner/ACL and durable directory-sync semantics have runtime proof; read-only lease inspection remains independently supported.
 
 ### Recovering missing pool state
 

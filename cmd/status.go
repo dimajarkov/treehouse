@@ -17,6 +17,7 @@ import (
 )
 
 var statusJSON bool
+var statusLeasePath string
 
 type statusJSONProcess struct {
 	PID  int32  `json:"pid"`
@@ -56,6 +57,17 @@ var statusCmd = &cobra.Command{
 		poolDir, err := config.ResolvePoolDir(repoRoot, config.ResolveRoot(rootFlag, cfg))
 		if err != nil {
 			return err
+		}
+
+		if cmd.Flags().Changed("lease-path") {
+			if !statusJSON || statusLeasePath == "" || len(args) != 0 {
+				return fmt.Errorf("--lease-path requires one absolute path, --json and no positional arguments")
+			}
+			inspection, err := pool.InspectLease(poolDir, statusLeasePath)
+			if err != nil {
+				return err
+			}
+			return json.NewEncoder(os.Stdout).Encode([]pool.LeaseInspection{inspection})
 		}
 
 		worktrees, err := pool.List(poolDir)
@@ -151,6 +163,7 @@ var statusCmd = &cobra.Command{
 
 func init() {
 	statusCmd.Flags().BoolVar(&statusJSON, "json", false, "Print pool status as JSON")
+	statusCmd.Flags().StringVar(&statusLeasePath, "lease-path", "", "Read only one existing durable lease at an absolute worktree path (requires --json; no recovery or process scan)")
 	rootCmd.AddCommand(statusCmd)
 }
 

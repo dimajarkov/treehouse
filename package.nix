@@ -35,7 +35,7 @@ buildGoModule {
 
   meta = {
     description = "Git worktree pool manager for parallel AI coding agent workflows";
-    homepage = "https://github.com/kunchenguid/treehouse";
+    homepage = "https://github.com/dimajarkov/treehouse";
     license = lib.licenses.mit;
     mainProgram = "treehouse";
     platforms = [
