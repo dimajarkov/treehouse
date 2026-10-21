@@ -46,7 +46,7 @@ so that multiple AI coding agents can work on the same repo in parallel.`,
 		}
 		// This explicit observation must not spawn a cache-writing updater.
 		// Changed also covers an invalid empty path: refusals stay read-only.
-		if cmd == launchAdmittedCmd || cmd.Parent() == reconcileAliasCmd || cmd == reconcileAliasCmd || (cmd == statusCmd && cmd.Flags().Changed("lease-path")) {
+		if isOutputOnlyCompletion(cmd) || cmd == launchAdmittedCmd || cmd.Parent() == reconcileAliasCmd || cmd == reconcileAliasCmd || (cmd == statusCmd && cmd.Flags().Changed("lease-path")) {
 			return nil
 		}
 		// Skip update check for dev builds, Nix store installs (upgraded

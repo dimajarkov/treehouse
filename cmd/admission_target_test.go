@@ -51,6 +51,16 @@ func TestDirectBackingGuardUsesTargetPool(t *testing.T) {
 				}
 			}
 			defer os.Remove(policy)
+			for _, shell := range []string{"bash", "zsh", "fish", "powershell"} {
+				stdout, stderr, code := runTreehouse(t, repo, home, nil, "completion", shell)
+				if code != 0 || strings.TrimSpace(stdout) == "" {
+					t.Fatalf("output-only %s completion refused: %d %s", shell, code, stderr)
+				}
+				after, e := os.ReadFile(statePath)
+				if e != nil || !bytes.Equal(before, after) {
+					t.Fatal("completion changed pool state")
+				}
+			}
 			for _, cwd := range []string{outside, unrelated} {
 				for _, journey := range []struct {
 					name string

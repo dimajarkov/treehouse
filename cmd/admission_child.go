@@ -17,7 +17,7 @@ func verifyAdmissionChild(cmd *cobra.Command) error {
 		// The bridge verifies its own route and holds the locks before dispatch.
 		// Reconciliation entry points are independently read-only or require an
 		// injected writer fence. Help/version never execute this lifecycle hook.
-		if cmd == launchAdmittedCmd || cmd == reconcileAliasCmd || cmd.Parent() == reconcileAliasCmd || cmd.Name() == "init" {
+		if cmd == launchAdmittedCmd || cmd == reconcileAliasCmd || cmd.Parent() == reconcileAliasCmd || cmd.Name() == "init" || isOutputOnlyCompletion(cmd) {
 			return nil
 		}
 		// Return and destroy resolve explicit targets independently of cwd. Check
@@ -149,4 +149,20 @@ func rejectDirectAdmissionTarget(target string) (bool, error) {
 		return true, rejectDirectAdmissionRepo(repo)
 	}
 	return false, nil
+}
+
+// Cobra owns this generated subtree. Exempt only that actual root child and
+// its descendants, never a lifecycle command merely containing completion text.
+func isOutputOnlyCompletion(cmd *cobra.Command) bool {
+	root := cmd.Root()
+	completion, _, e := root.Find([]string{"completion"})
+	if e != nil || completion == root || completion.Parent() != root || completion.Name() != "completion" {
+		return false
+	}
+	for current := cmd; current != nil && current != root; current = current.Parent() {
+		if current == completion {
+			return true
+		}
+	}
+	return false
 }
