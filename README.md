@@ -1,5 +1,10 @@
 <h1 align="center">treehouse</h1>
 
+This is [Dmitri's maintained fork](https://github.com/dimajarkov/treehouse) of [Kun Chen's original Treehouse](https://github.com/kunchenguid/treehouse).
+The original MIT copyright and Go module path remain intact.
+`origin` must point to `dimajarkov/treehouse`; the original repository is a read-only `upstream`.
+
+
 <p align="center">
   <a href="https://github.com/kunchenguid/treehouse/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/kunchenguid/treehouse/ci.yml?style=flat-square&label=CI" /></a>
   <a href="https://github.com/kunchenguid/treehouse/actions/workflows/release.yml"><img alt="Release" src="https://img.shields.io/github/actions/workflow/status/kunchenguid/treehouse/release.yml?style=flat-square&label=Release" /></a>
@@ -41,58 +46,30 @@ $ exit                         # exit the subshell when you're done
 
 ## Install
 
-**macOS / Linux**
+Dmitri's guarded macOS installation is owned by [dimajarkov/dotfiles](https://github.com/dimajarkov/dotfiles).
+That repository pins an immutable revision from this fork and provides a feature-only Nix installer for the regular wrapper/backing pair and its launch-admission policy.
+Use the pinned dotfiles installation when operating an existing managed pool; a generic installer cannot safely replace that pair.
+
+For an isolated evaluation of this fork, pin its exact commit:
 
 ```sh
-curl -fsSL https://kunchenguid.github.io/treehouse/install.sh | sh
-```
-
-**Windows (PowerShell)**
-
-```powershell
-irm https://kunchenguid.github.io/treehouse/install.ps1 | iex
-```
-
-**Nix**
-
-```sh
-nix run github:kunchenguid/treehouse
-# or pin a specific release tag:
-nix run github:kunchenguid/treehouse/v3.1.2
-```
-
-Install into your Nix profile:
-
-```sh
-nix profile add github:kunchenguid/treehouse
-```
-
-Or add to your flake inputs:
-
-```nix
-treehouse = {
-  url = "github:kunchenguid/treehouse";
-  inputs.nixpkgs.follows = "nixpkgs";
-};
+nix run github:dimajarkov/treehouse/<commit>
 ```
 
 The flake exposes `#default` and `#treehouse` package outputs, plus `apps` for `nix run`.
-
-A Nix install upgrades through Nix: `treehouse update` refuses to run from the Nix store and the update notice stays silent there.
-
-**Go**
-
-```sh
-go install github.com/kunchenguid/treehouse/v3@latest
-```
+A Nix install upgrades through Nix; use the dotfiles owner procedure for the guarded macOS installation.
 
 **From source**
 
 ```sh
-git clone https://github.com/kunchenguid/treehouse.git
+git clone https://github.com/dimajarkov/treehouse.git
 cd treehouse
-make install
+git switch codex/physical-identity-and-guarded-repair
+make build
+make test
 ```
+
+The original author's generic installers and `go install` module distribution follow the original upstream, so they do not install this fork's fixes.
 
 ## How It Works
 
