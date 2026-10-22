@@ -73,7 +73,7 @@ func readInspectionFile(path string, limit int64) ([]byte, error) {
 
 // InspectLease never calls WithStateLock: that owner deliberately performs
 // quarantine recovery before its callback. Use the existing lock without
-// creating it, take it nonblocking, and read only the currently persisted state.
+// creating it, share it nonblocking with other readers, and read only persisted state.
 func InspectLease(poolDir, worktreePath string) (LeaseInspection, error) {
 	deny := func() (LeaseInspection, error) {
 		return LeaseInspection{}, fmt.Errorf("cannot corroborate one current durable lease; inspect the pool through its lifecycle owner")
@@ -98,7 +98,7 @@ func InspectLease(poolDir, worktreePath string) (LeaseInspection, error) {
 		return deny()
 	}
 	defer lock.Close()
-	if err = tryLockFile(lock); err != nil {
+	if err = tryReadLockFile(lock); err != nil {
 		return LeaseInspection{}, fmt.Errorf("lease inspection unavailable: existing pool lock is busy or unverifiable")
 	}
 	defer unlockFile(lock)

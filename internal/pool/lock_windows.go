@@ -28,3 +28,8 @@ func tryLockFile(f *os.File) error {
 func openInspectionHandle(path string) (*os.File, error) {
 	return os.Open(path) // The common pre/post handle checks refuse reparse substitutions before reading.
 }
+
+// No EXCLUSIVE_LOCK flag: share with readers but never an exclusive writer.
+func tryReadLockFile(f *os.File) error {
+	return windows.LockFileEx(windows.Handle(f.Fd()), windows.LOCKFILE_FAIL_IMMEDIATELY, 0, 1, 0, new(windows.Overlapped))
+}
