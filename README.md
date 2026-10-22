@@ -393,6 +393,9 @@ For backward compatibility, `treehouse return <path>` without either condition k
 ### Reconciling one alias duplicate
 
 `reconcile-alias` is an explicit metadata-owner operation for exactly two registrations of the same Git worktree: one retained durable lease and one inert unleased shadow.
+An explicit `recovered_shadow: true` request may instead select a synthetic recovered quarantine with no durable lease ID, owner process, or seed inventory.
+The authenticated original lease must predate recovery, both rows must resolve to the same checkout, and the full recovery row remains fingerprinted in the request and private rollback backup.
+This removes only the duplicate claim; dirty files, unlanded commits, original lease identity and sibling quarantines remain untouched.
 It does not return, reacquire, reset or delete a worktree, run recovery, enumerate processes, or repair other entries.
 A source candidate or preview is not operator permission to apply a live repair.
 Obtain exact-target approval after reviewing the preview and retain that approval separately.
