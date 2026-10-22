@@ -22,15 +22,16 @@ import (
 // AliasRequest describes one explicitly selected metadata-only repair. Hashes
 // detect changes; neither they nor an inventory HMAC grant operator authority.
 type AliasRequest struct {
-	Pool       string    `json:"pool"`
-	Target     string    `json:"target"`
-	Name       string    `json:"name"`
-	LeaseID    string    `json:"lease_id"`
-	Holder     string    `json:"holder"`
-	LeasedAt   time.Time `json:"leased_at"`
-	StateHash  string    `json:"state_sha256"`
-	KeeperHash string    `json:"keeper_sha256"`
-	ShadowHash string    `json:"shadow_sha256"`
+	RecoveredShadow bool      `json:"recovered_shadow,omitempty"`
+	Pool            string    `json:"pool"`
+	Target          string    `json:"target"`
+	Name            string    `json:"name"`
+	LeaseID         string    `json:"lease_id"`
+	Holder          string    `json:"holder"`
+	LeasedAt        time.Time `json:"leased_at"`
+	StateHash       string    `json:"state_sha256"`
+	KeeperHash      string    `json:"keeper_sha256"`
+	ShadowHash      string    `json:"shadow_sha256"`
 }
 
 type AliasPreview struct {
@@ -308,9 +309,12 @@ func (s *aliasSession) plan() error {
 		authenticated := w.SeedInventoryKnown && validSeedInventory(w.SeededPaths) && validSeedMetadata(w) && validSeedInventoryDigest(s.key, w)
 		// An unrelated existing quarantine is preserved, not healed or trusted.
 		// Full state/sibling hashes still pin its fields and ordering. Selected
-		// rows and known inventories must authenticate before any mutation.
+		// keepers and known inventories must authenticate before any mutation.
+		// An explicitly approved synthetic recovered shadow has no inventory to
+		// authenticate and must meet the narrower recovery-only predicate.
 		retainedQuarantine := !selected && !w.SeedInventoryKnown && w.Leased && w.LeaseHolder == RecoveredLeaseHolder && validSeedInventory(w.SeededPaths) && validSeedMetadata(w)
-		if !authenticated && !retainedQuarantine {
+		selectedRecovered := h == r.ShadowHash && r.RecoveredShadow && recoveredAliasShadow(w)
+		if !authenticated && !retainedQuarantine && !selectedRecovered {
 			return fmt.Errorf("unauthenticated inventory; no healing permitted")
 		}
 		wi, e := os.Stat(w.Path)
@@ -349,7 +353,11 @@ func (s *aliasSession) plan() error {
 	inert := func(x WorktreeEntry) bool {
 		return !x.Destroying && x.OwnerPID == 0 && x.OwnerStartedAt == 0 && x.RecoveryError == "" && x.RecoveryReason == "" && len(x.SeededPaths) == 0 && x.SeedBackend == "" && x.SeedAuthIdentity == ""
 	}
-	if !inert(k) || !inert(w) || !k.Leased || k.LeaseID != r.LeaseID || k.LeaseHolder != r.Holder || !k.LeasedAt.Equal(r.LeasedAt) || w.Leased || w.LeaseID != "" || w.LeaseHolder != "" || !w.LeasedAt.IsZero() || k.Path == r.Target || w.Path != r.Target {
+	shadowAllowed := inert(w) && !w.Leased && w.LeaseID == "" && w.LeaseHolder == "" && w.LeasedAt.IsZero()
+	if r.RecoveredShadow {
+		shadowAllowed = recoveredAliasShadow(w) && w.LeasedAt.After(k.LeasedAt)
+	}
+	if !inert(k) || !shadowAllowed || !k.Leased || k.LeaseID != r.LeaseID || k.LeaseHolder != r.Holder || !k.LeasedAt.Equal(r.LeasedAt) || k.Path == r.Target || w.Path != r.Target {
 		return fmt.Errorf("keeper/shadow ownership predicate denied")
 	}
 	// Preserve every field and row order except keeper path/digest and one shadow.
@@ -756,4 +764,16 @@ func aliasImplementation() string {
 		}
 	}
 	return result
+}
+
+// A recovered alias is a synthetic quarantine claim, never another durable
+// owner. Only explicit request approval may remove it after the authenticated
+// keeper and both filesystem identities have been checked by plan.
+func recoveredAliasShadow(w WorktreeEntry) bool {
+	return !w.Destroying && w.OwnerPID == 0 && w.OwnerStartedAt == 0 &&
+		w.Leased && w.LeaseID == "" && w.LeaseHolder == RecoveredLeaseHolder &&
+		!w.LeasedAt.IsZero() && w.CreatedAt.Equal(w.LeasedAt) &&
+		!w.SeedInventoryKnown && w.SeedInventoryDigest == "" &&
+		len(w.SeededPaths) == 0 && w.SeedBackend == "" && w.SeedAuthIdentity == "" &&
+		w.RecoveryError == "" && strings.TrimSpace(w.RecoveryReason) != ""
 }
